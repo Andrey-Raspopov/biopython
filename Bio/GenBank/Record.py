@@ -12,6 +12,7 @@ Classes:
  - Qualifier - Qualifiers on a Feature.
 
 """
+from dataclasses import dataclass, field
 
 import Bio.GenBank
 
@@ -95,6 +96,7 @@ def _indent_genbank(information, indent):
     return output_info
 
 
+@dataclass
 class Record:
     """Hold GenBank information in a format similar to the original record.
 
@@ -167,39 +169,37 @@ class Record:
     )
     SEQUENCE_FORMAT = "%" + str(GB_SEQUENCE_INDENT) + "s"
 
-    def __init__(self):
-        """Initialize."""
-        self.accession = []
-        self.base_counts = ""
-        self.comment = ""
-        self.contig = ""
-        self.data_file_division = ""
-        self.date = ""
-        self.db_source = ""
-        self.dblinks = []
-        self.definition = ""
-        self.features = []
-        self.gi = ""
-        self.keywords = []
-        self.locus = ""
-        self.molecule_type = ""
-        self.nid = ""
-        self.organism = ""
-        self.origin = ""
-        self.pid = ""
-        self.primary = []
-        self.projects = []
-        self.references = []
-        self.residue_type = ""
-        self.segment = ""
-        self.sequence = ""
-        self.size = ""
-        self.source = ""
-        self.taxonomy = []
-        self.topology = ""
-        self.version = ""
-        self.wgs = ""
-        self.wgs_scafld = []
+    accession: str = field(default_factory=list)
+    base_counts: str = ""
+    comment: str = ""
+    contig: str = ""
+    data_file_division: str = ""
+    date: str = ""
+    db_source: str = ""
+    dblinks: str = field(default_factory=list)
+    definition: str = ""
+    features: str = field(default_factory=list)
+    gi: str = ""
+    keywords: str = field(default_factory=list)
+    locus: str = ""
+    molecule_type: str = ""
+    nid: str = ""
+    organism: str = ""
+    origin: str = ""
+    pid: str = ""
+    primary: str = field(default_factory=list)
+    projects: str = field(default_factory=list)
+    references: str = field(default_factory=list)
+    residue_type: str = ""
+    segment: str = ""
+    sequence: str = ""
+    size: str = ""
+    source: str = ""
+    taxonomy: str = field(default_factory=list)
+    topology: str = ""
+    version: str = ""
+    wgs: str = ""
+    wgs_scafld: str = field(default_factory=list)
 
     def __str__(self):
         """Provide a GenBank formatted output option for a Record.
@@ -495,6 +495,7 @@ class Record:
         return output
 
 
+@dataclass
 class Reference:
     """Hold information from a GenBank reference.
 
@@ -511,17 +512,15 @@ class Reference:
 
     """
 
-    def __init__(self):
-        """Initialize."""
-        self.number = ""
-        self.bases = ""
-        self.authors = ""
-        self.consrtm = ""
-        self.title = ""
-        self.journal = ""
-        self.medline_id = ""
-        self.pubmed_id = ""
-        self.remark = ""
+    number: str = ""
+    bases: str = ""
+    authors: str = ""
+    consrtm: str = ""
+    title: str = ""
+    journal: str = ""
+    medline_id: str = ""
+    pubmed_id: str = ""
+    remark: str = ""
 
     def __str__(self):
         """Convert the reference to a GenBank format string."""
@@ -606,6 +605,7 @@ class Reference:
         return output
 
 
+@dataclass
 class Feature:
     """Hold information about a Feature in the Feature Table of GenBank record.
 
@@ -616,11 +616,9 @@ class Feature:
 
     """
 
-    def __init__(self, key="", location=""):
-        """Initialize."""
-        self.key = key
-        self.location = location
-        self.qualifiers = []
+    key: str = ""
+    location: str = ""
+    qualifiers: list = field(default_factory=list)
 
     def __repr__(self):
         """Representation of the object for debugging or logging."""
@@ -637,6 +635,7 @@ class Feature:
         return output
 
 
+@dataclass
 class Qualifier:
     """Hold information about a qualifier in a GenBank feature.
 
@@ -646,10 +645,8 @@ class Qualifier:
 
     """
 
-    def __init__(self, key="", value=""):
-        """Initialize."""
-        self.key = key
-        self.value = value
+    key: str = ""
+    value: str = ""
 
     def __repr__(self):
         """Representation of the object for debugging or logging."""
