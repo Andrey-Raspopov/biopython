@@ -5796,6 +5796,7 @@ qualifiers:
             "date": "11-OCT-2001",
             "gi": "15823953",
             "keywords": [""],
+            "molecule_type": "DNA",
             "organism": "Streptomyces avermitilis",
             "sequence_version": 1,
             "source": "Streptomyces avermitilis",
@@ -6617,7 +6618,7 @@ KEYWORDS    """
             record.annotations["structured_comment"]["MIENS-Data"]["environment"],
             "Temperate shelf and sea biome [ENVO:00000895], "
             "coastal water body [ENVO:02000049], "
-            "coastal water [ENVO:00002150]"
+            "coastal water [ENVO:00002150]",
         )
 
     def test_locus_line_topogoly(self):
@@ -6961,15 +6962,14 @@ class LineOneTests(unittest.TestCase):
                 "circular",
                 "DNA",
                 None,
-                [BiopythonParserWarning],
+                None,
             ),
-            # This is a test of the format > 80 chars long
             (
                 "LOCUS       AZZZAA02123456789 1000000000 bp    DNA     linear   PRI 15-OCT-2018",
                 "linear",
                 "DNA",
                 "PRI",
-                None,
+                [BiopythonParserWarning],
             ),
         ]
         for (line, topo, mol_type, div, warning_list) in tests:

@@ -1273,313 +1273,64 @@ class GenBankScanner(InsdcScanner):
         #####################################
         # LOCUS line                        #
         #####################################
-        if line[0 : self.GENBANK_INDENT] != "LOCUS       ":
-            raise ValueError("LOCUS line does not start correctly:\n" + line)
 
-        # Have to break up the locus line, and handle the different bits of it.
-        # There are at least two different versions of the locus line...
-        if line[29:33] in [" bp ", " aa ", " rc "] and line[55:62] == "       ":
-            # Old... note we insist on the 55:62 being empty to avoid trying
-            # to parse space separated LOCUS lines from Ensembl etc, see below.
-            #
-            #    Positions  Contents
-            #    ---------  --------
-            #    00:06      LOCUS
-            #    06:12      spaces
-            #    12:??      Locus name
-            #    ??:??      space
-            #    ??:29      Length of sequence, right-justified
-            #    29:33      space, bp, space
-            #    33:41      strand type / molecule type, e.g. DNA
-            #    41:42      space
-            #    42:51      Blank (implies linear), linear or circular
-            #    51:52      space
-            #    52:55      The division code (e.g. BCT, VRL, INV)
-            #    55:62      space
-            #    62:73      Date, in the form dd-MMM-yyyy (e.g., 15-MAR-1991)
-            #
-            # assert line[29:33] in [' bp ', ' aa ',' rc '] , \
-            #       'LOCUS line does not contain size units at expected position:\n' + line
-            if line[41:42] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 42:\n" + line
-                )
-            if line[42:51].strip() not in ["", "linear", "circular"]:
-                raise ValueError(
-                    "LOCUS line does not contain valid entry "
-                    "(linear, circular, ...):\n" + line
-                )
-            if line[51:52] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 52:\n" + line
-                )
-            # if line[55:62] != '       ':
-            #      raise ValueError('LOCUS line does not contain spaces from position 56 to 62:\n' + line)
-            if line[62:73].strip():
-                if line[64:65] != "-":
-                    raise ValueError(
-                        "LOCUS line does not contain - at "
-                        "position 65 in date:\n" + line
-                    )
-                if line[68:69] != "-":
-                    raise ValueError(
-                        "LOCUS line does not contain - at "
-                        "position 69 in date:\n" + line
-                    )
+        assert line.startswith(self.RECORD_START), ValueError(
+            "LOCUS line does not start correctly:\n" + line
+        )
+        pattern = (
+            r"LOCUS"
+            r" +([^\s]+)"
+            r" *([0-9]+)?"
+            r" *(bp|aa|rc)?"
+            r" *(.*DNA|.*RNA|.*dna|.*rna)?"
+            r" *(linear|circular)?"
+            r" *(?!.*DNA|.*RNA)([A-Z]{3})?"
+            r" *([0-9]{2}-[A-Z]{3}-[0-9]{4})?"
+        )
+        matches = re.match(pattern, line)
+        res = dict(
+            zip(
+                [
+                    "locus_name",
+                    "size",
+                    "unit",
+                    "mol_type",
+                    "topology",
+                    "division",
+                    "date",
+                ],
+                matches.groups(),
+            )
+        )
 
-            name_and_length_str = line[self.GENBANK_INDENT : 29]
-            while "  " in name_and_length_str:
-                name_and_length_str = name_and_length_str.replace("  ", " ")
-            name_and_length = name_and_length_str.split(" ")
-            if len(name_and_length) > 2:
-                raise ValueError(
-                    "Cannot parse the name and length in the LOCUS line:\n" + line
-                )
-            if len(name_and_length) == 1:
-                raise ValueError("Name and length collide in the LOCUS line:\n" + line)
-            # Should be possible to split them based on position, if
-            # a clear definition of the standard exists THAT AGREES with
-            # existing files.
-            name, length = name_and_length
-            if len(name) > 16:
-                # As long as the sequence is short, can steal its leading spaces
-                # to extend the name over the current 16 character limit.
-                # However, that deserves a warning as it is out of spec.
-                warnings.warn(
-                    "GenBank LOCUS line identifier over 16 characters",
-                    BiopythonParserWarning,
-                )
-            consumer.locus(name)
-            consumer.size(length)
-            # consumer.residue_type(line[33:41].strip())
-
-            if line[33:51].strip() == "" and line[29:33] == " aa ":
-                # Amino acids -> protein (even if there is no residue type given)
-                # We want to use a protein alphabet in this case, rather than a
-                # generic one. Not sure if this is the best way to achieve this,
-                # but it works because the scanner checks for this:
-                consumer.residue_type("PROTEIN")
-            else:
-                consumer.residue_type(line[33:51].strip())
-
-            consumer.molecule_type(line[33:41].strip())
-            consumer.topology(line[42:51].strip())
-            consumer.data_file_division(line[52:55])
-            if line[62:73].strip():
-                consumer.date(line[62:73])
-        elif line[40:44] in [" bp ", " aa ", " rc "] and line[54:64].strip() in [
-            "",
-            "linear",
-            "circular",
-        ]:
-            # New... linear/circular/big blank test should avoid EnsEMBL style
-            # LOCUS line being treated like a proper column based LOCUS line.
-            #
-            #    Positions  Contents
-            #    ---------  --------
-            #    00:06      LOCUS
-            #    06:12      spaces
-            #    12:??      Locus name
-            #    ??:??      space
-            #    ??:40      Length of sequence, right-justified
-            #    40:44      space, bp, space
-            #    44:47      Blank, ss-, ds-, ms-
-            #    47:54      Blank, DNA, RNA, tRNA, mRNA, uRNA, snRNA, cDNA
-            #    54:55      space
-            #    55:63      Blank (implies linear), linear or circular
-            #    63:64      space
-            #    64:67      The division code (e.g. BCT, VRL, INV)
-            #    67:68      space
-            #    68:79      Date, in the form dd-MMM-yyyy (e.g., 15-MAR-1991)
-            #
-            if len(line) < 79:
-                # JBEI genbank files seem to miss a divison code and date
-                # See issue #1656 e.g.
-                # LOCUS       pEH010                  5743 bp    DNA     circular
-                warnings.warn(
-                    "Truncated LOCUS line found - is this correct?\n:%r" % line,
-                    BiopythonParserWarning,
-                )
-                padding_len = 79 - len(line)
-                padding = " " * padding_len
-                line += padding
-
-            if line[40:44] not in [" bp ", " aa ", " rc "]:
-                raise ValueError(
-                    "LOCUS line does not contain size units at "
-                    "expected position:\n" + line
-                )
-            if line[44:47] not in ["   ", "ss-", "ds-", "ms-"]:
-                raise ValueError(
-                    "LOCUS line does not have valid strand "
-                    "type (Single stranded, ...):\n" + line
-                )
-
-            if not (
-                line[47:54].strip() == ""
-                or "DNA" in line[47:54].strip().upper()
-                or "RNA" in line[47:54].strip().upper()
-            ):
-                raise ValueError(
-                    "LOCUS line does not contain valid "
-                    "sequence type (DNA, RNA, ...):\n" + line
-                )
-            if line[54:55] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 55:\n" + line
-                )
-            if line[55:63].strip() not in ["", "linear", "circular"]:
-                raise ValueError(
-                    "LOCUS line does not contain valid "
-                    "entry (linear, circular, ...):\n" + line
-                )
-            if line[63:64] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 64:\n" + line
-                )
-            if line[67:68] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 68:\n" + line
-                )
-            if line[68:79].strip():
-                if line[70:71] != "-":
-                    raise ValueError(
-                        "LOCUS line does not contain - at "
-                        "position 71 in date:\n" + line
-                    )
-                if line[74:75] != "-":
-                    raise ValueError(
-                        "LOCUS line does not contain - at "
-                        "position 75 in date:\n" + line
-                    )
-
-            name_and_length_str = line[self.GENBANK_INDENT : 40]
-            while "  " in name_and_length_str:
-                name_and_length_str = name_and_length_str.replace("  ", " ")
-            name_and_length = name_and_length_str.split(" ")
-            if len(name_and_length) > 2:
-                raise ValueError(
-                    "Cannot parse the name and length in the LOCUS line:\n" + line
-                )
-            if len(name_and_length) == 1:
-                raise ValueError("Name and length collide in the LOCUS line:\n" + line)
-            # Should be possible to split them based on position, if
-            # a clear definition of the stand exists THAT AGREES with
-            # existing files.
-            consumer.locus(name_and_length[0])
-            consumer.size(name_and_length[1])
-
-            if line[44:54].strip() == "" and line[40:44] == " aa ":
-                # Amino acids -> protein (even if there is no residue type given)
-                # We want to use a protein alphabet in this case, rather than a
-                # generic one. Not sure if this is the best way to achieve this,
-                # but it works because the scanner checks for this:
-                consumer.residue_type(("PROTEIN " + line[54:63]).strip())
-            else:
-                consumer.residue_type(line[44:63].strip())
-
-            consumer.molecule_type(line[44:54].strip())
-            consumer.topology(line[55:63].strip())
-            if line[64:76].strip():
-                consumer.data_file_division(line[64:67])
-            if line[68:79].strip():
-                consumer.date(line[68:79])
-        elif line[self.GENBANK_INDENT :].strip().count(" ") == 0:
-            # Truncated LOCUS line, as produced by some EMBOSS tools - see bug 1762
-            #
-            # e.g.
-            #
-            #    "LOCUS       U00096"
-            #
-            # rather than:
-            #
-            #    "LOCUS       U00096               4639675 bp    DNA     circular BCT"
-            #
-            #    Positions  Contents
-            #    ---------  --------
-            #    00:06      LOCUS
-            #    06:12      spaces
-            #    12:??      Locus name
-            if line[self.GENBANK_INDENT :].strip() != "":
-                consumer.locus(line[self.GENBANK_INDENT :].strip())
-            else:
-                # Must just have just "LOCUS       ", is this even legitimate?
-                # We should be able to continue parsing... we need real world testcases!
-                warnings.warn(
-                    "Minimal LOCUS line found - is this correct?\n:%r" % line,
-                    BiopythonParserWarning,
-                )
-        elif (
-            len(line.split()) == 8
-            and line.split()[3] in ("aa", "bp")
-            and line.split()[5] in ("linear", "circular")
-        ):
-            # Cope with invalidly spaced GenBank LOCUS lines like
-            # LOCUS       AB070938          6497 bp    DNA     linear   BCT 11-OCT-2001
-            # This will also cope with extra long accession numbers and
-            # sequence lengths
-            splitline = line.split()
-            consumer.locus(splitline[1])
-            # Provide descriptive error message if the sequence is too long
-            # for python to handle
-
-            if int(splitline[2]) > sys.maxsize:
+        residue_type = ""
+        if len(res["locus_name"]) > 16:
+            warnings.warn(
+                "GenBank LOCUS line identifier over 16 characters",
+                BiopythonParserWarning,
+            )
+        consumer.locus(res["locus_name"])
+        if res["size"]:
+            if int(res["size"]) > sys.maxsize:
                 raise ValueError(
                     "Tried to load a sequence with a length %s, "
                     "your installation of python can only load "
-                    "sesquences of length %s" % (splitline[2], sys.maxsize)
+                    "sequences of length %s" % (res["size"], sys.maxsize)
                 )
-            else:
-                consumer.size(splitline[2])
-
-            consumer.residue_type(splitline[4])
-            consumer.topology(splitline[5])
-            consumer.data_file_division(splitline[6])
-            consumer.date(splitline[7])
-            if len(line) < 80:
-                warnings.warn(
-                    "Attempting to parse malformed locus line:\n%r\n"
-                    "Found locus %r size %r residue_type %r\n"
-                    "Some fields may be wrong."
-                    % (line, splitline[1], splitline[2], splitline[4]),
-                    BiopythonParserWarning,
-                )
-        elif len(line.split()) == 7 and line.split()[3] in ["aa", "bp"]:
-            # Cope with EnsEMBL genbank files which use space separation rather
-            # than the expected column based layout. e.g.
-            # LOCUS       HG531_PATCH 1000000 bp DNA HTG 18-JUN-2011
-            # LOCUS       HG531_PATCH 759984 bp DNA HTG 18-JUN-2011
-            # LOCUS       HG506_HG1000_1_PATCH 814959 bp DNA HTG 18-JUN-2011
-            # LOCUS       HG506_HG1000_1_PATCH 1219964 bp DNA HTG 18-JUN-2011
-            # Notice that the 'bp' can occur in the position expected by either
-            # the old or the new fixed column standards (parsed above).
-            splitline = line.split()
-            consumer.locus(splitline[1])
-            consumer.size(splitline[2])
-            consumer.residue_type(splitline[4])
-            consumer.data_file_division(splitline[5])
-            consumer.date(splitline[6])
-        elif len(line.split()) >= 4 and line.split()[3] in ["aa", "bp"]:
-            # Cope with EMBOSS seqret output where it seems the locus id can cause
-            # the other fields to overflow.  We just IGNORE the other fields!
-            warnings.warn(
-                "Malformed LOCUS line found - is this correct?\n:%r" % line,
-                BiopythonParserWarning,
-            )
-            consumer.locus(line.split()[1])
-            consumer.size(line.split()[2])
-        elif len(line.split()) >= 4 and line.split()[-1] in ["aa", "bp"]:
-            # Cope with pseudo-GenBank files like this:
-            #   "LOCUS       RNA5 complete       1718 bp"
-            # Treat everything between LOCUS and the size as the identifier.
-            warnings.warn(
-                "Malformed LOCUS line found - is this correct?\n:%r" % line,
-                BiopythonParserWarning,
-            )
-            consumer.locus(line[5:].rsplit(None, 2)[0].strip())
-            consumer.size(line.split()[-2])
-        else:
-            raise ValueError("Did not recognise the LOCUS line layout:\n" + line)
+            consumer.size(res["size"])
+        if res["mol_type"]:
+            consumer.molecule_type(res["mol_type"])
+            residue_type += res["mol_type"]
+        if res["topology"]:
+            consumer.topology(res["topology"])
+            residue_type += " " + res["topology"]
+        consumer.residue_type(residue_type.strip())
+        if res["unit"] == "aa":
+            consumer.residue_type("PROTEIN")
+        if res["division"]:
+            consumer.data_file_division(res["division"])
+        if res["date"]:
+            consumer.date(res["date"])
 
     def _feed_header_lines(self, consumer, lines):
         # Following dictionary maps GenBank lines to the associated
