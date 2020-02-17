@@ -26,8 +26,7 @@ Feature Table Documentation:
 # http://is.gd/nNgk
 # for more details of this format, and an example.
 # Added by Ying Huang & Iddo Friedberg
-
-
+import logging
 import warnings
 import re
 import sys
@@ -60,13 +59,12 @@ class InsdcScanner:
     FEATURE_QUALIFIER_SPACER = ""
     SEQUENCE_HEADERS = ["XXX"]  # with right hand side spaces removed
 
-    def __init__(self, debug=0):
+    def __init__(self):
         """Initialize."""
         assert len(self.RECORD_START) == self.HEADER_WIDTH
         for marker in self.SEQUENCE_HEADERS:
             assert marker == marker.rstrip()
         assert len(self.FEATURE_QUALIFIER_SPACER) == self.FEATURE_QUALIFIER_INDENT
-        self.debug = debug
         self.handle = None
         self.line = None
 
@@ -88,27 +86,21 @@ class InsdcScanner:
             else:
                 line = self.handle.readline()
             if not line:
-                if self.debug:
-                    print("End of file")
+                logging.debug("End of file")
                 return None
             if isinstance(line[0], int):
                 # Same exception as for FASTQ files
                 raise ValueError("Is this handle in binary mode not text mode?")
             if line[: self.HEADER_WIDTH] == self.RECORD_START:
-                if self.debug > 1:
-                    print("Found the start of a record:\n" + line)
+                logging.debug("Found the start of a record:\n" + line)
                 break
             line = line.rstrip()
             if line == "//":
-                if self.debug > 1:
-                    print("Skipping // marking end of last record")
+                logging.debug("Skipping // marking end of last record")
             elif line == "":
-                if self.debug > 1:
-                    print("Skipping blank line before record")
+                logging.debug("Skipping blank line before record")
             else:
-                # Ignore any header before the first ID/LOCUS line.
-                if self.debug > 1:
-                    print("Skipping header line before record:\n" + line)
+                logging.debug("Skipping header line before record:\n" + line)
         self.line = line
         return line
 
@@ -129,15 +121,10 @@ class InsdcScanner:
                 raise ValueError("Premature end of line during sequence data")
             line = line.rstrip()
             if line in self.FEATURE_START_MARKERS:
-                if self.debug:
-                    print("Found feature table")
+                logging.debug("Found feature table")
                 break
-            # if line[:self.HEADER_WIDTH]==self.FEATURE_START_MARKER[:self.HEADER_WIDTH]:
-            #    if self.debug : print("Found header table (?)")
-            #    break
             if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
-                if self.debug:
-                    print("Found start of sequence")
+                logging.debug("Found start of sequence")
                 break
             if line == "//":
                 raise ValueError("Premature end of sequence data marker '//' found")
@@ -156,8 +143,7 @@ class InsdcScanner:
         Assumes you have already read to the start of the features table.
         """
         if self.line.rstrip() not in self.FEATURE_START_MARKERS:
-            if self.debug:
-                print("Didn't find any feature table")
+            logging.debug("Didn't find any feature table")
             return []
 
         while self.line.rstrip() in self.FEATURE_START_MARKERS:
@@ -169,15 +155,13 @@ class InsdcScanner:
             if not line:
                 raise ValueError("Premature end of line during features table")
             if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
-                if self.debug:
-                    print("Found start of sequence")
+                logging.debug("Found start of sequence")
                 break
             line = line.rstrip()
             if line == "//":
                 raise ValueError("Premature end of features table, marker '//' found")
             if line in self.FEATURE_END_MARKERS:
-                if self.debug:
-                    print("Found end of features")
+                logging.debug("Found end of features")
                 line = self.handle.readline()
                 break
             if line[2 : self.FEATURE_QUALIFIER_INDENT].strip() == "":
@@ -336,42 +320,30 @@ class InsdcScanner:
                         # ApE can output /note=
                         qualifiers.append((key, ""))
                     elif value == '"':
-                        # One single quote
-                        if self.debug:
-                            print("Single quote %s:%s" % (key, value))
-                        # DO NOT remove the quote...
+                        logging.debug("Single quote %s:%s" % (key, value))
                         qualifiers.append((key, value))
                     elif value[0] == '"':
-                        # Quoted...
                         value_list = [value]
                         while value_list[-1][-1] != '"':
                             value_list.append(next(iterator))
                         value = "\n".join(value_list)
-                        # DO NOT remove the quotes...
                         qualifiers.append((key, value))
                     else:
-                        # Unquoted
-                        # if debug : print("Unquoted line %s:%s" % (key,value))
                         qualifiers.append((key, value))
                 else:
-                    # Unquoted continuation
                     assert len(qualifiers) > 0
                     assert key == qualifiers[-1][0]
-                    # if debug : print("Unquoted Cont %s:%s" % (key, line))
                     if qualifiers[-1][1] is None:
                         raise StopIteration
                     qualifiers[-1] = (key, qualifiers[-1][1] + "\n" + line)
             return feature_key, feature_location, qualifiers
         except StopIteration:
-            # Bummer
             raise ValueError(
                 "Problem with '%s' feature:\n%s" % (feature_key, "\n".join(lines))
             ) from None
 
     def parse_footer(self):
         """Return a tuple containing a list of any misc strings, and the sequence."""
-        # This is a basic bit of code to scan and discard the sequence,
-        # which was useful when developing the sub classes.
         if self.line in self.FEATURE_END_MARKERS:
             while self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS:
                 self.line = self.handle.readline()
@@ -969,8 +941,7 @@ class EmblScanner(InsdcScanner):
                 # Its a semi-automatic entry!
                 getattr(consumer, consumer_dict[line_type])(data)
             else:
-                if self.debug:
-                    print("Ignoring EMBL header line:\n%s" % line)
+                logging.debug("Ignoring EMBL header line:\n%s" % line)
 
     def _feed_misc_lines(self, consumer, lines):
         # TODO - Should we do something with the information on the SQ line(s)?
@@ -1091,8 +1062,7 @@ class _ImgtScanner(EmblScanner):
         Assumes you have already read to the start of the features table.
         """
         if self.line.rstrip() not in self.FEATURE_START_MARKERS:
-            if self.debug:
-                print("Didn't find any feature table")
+            logging.debug("Didn't find any feature table")
             return []
 
         while self.line.rstrip() in self.FEATURE_START_MARKERS:
@@ -1106,15 +1076,13 @@ class _ImgtScanner(EmblScanner):
             if not line:
                 raise ValueError("Premature end of line during features table")
             if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
-                if self.debug:
-                    print("Found start of sequence")
+                logging.debug("Found start of sequence")
                 break
             line = line.rstrip()
             if line == "//":
                 raise ValueError("Premature end of features table, marker '//' found")
             if line in self.FEATURE_END_MARKERS:
-                if self.debug:
-                    print("Found end of features")
+                logging.debug("Found end of features")
                 line = self.handle.readline()
                 break
             if line[2 : self.FEATURE_QUALIFIER_INDENT].strip() == "":
@@ -1185,7 +1153,25 @@ class GenBankScanner(InsdcScanner):
         "WGS",
         "TSA",
         "TLS",
-    ]  # trailing spaces removed
+    ]
+    CONSUMER_DICT = {
+        "DEFINITION": "definition",
+        "ACCESSION": "accession",
+        "NID": "nid",
+        "PID": "pid",
+        "DBSOURCE": "db_source",
+        "KEYWORDS": "keywords",
+        "SEGMENT": "segment",
+        "SOURCE": "source",
+        "AUTHORS": "authors",
+        "CONSRTM": "consrtm",
+        "PROJECT": "project",
+        "TITLE": "title",
+        "JOURNAL": "journal",
+        "MEDLINE": "medline_id",
+        "PUBMED": "pubmed_id",
+        "REMARK": "remark",
+    }
 
     GENBANK_INDENT = HEADER_WIDTH
     GENBANK_SPACER = " " * GENBANK_INDENT
@@ -1251,30 +1237,6 @@ class GenBankScanner(InsdcScanner):
         return misc_lines, "".join(seq_lines).replace(" ", "")
 
     def _feed_first_line(self, consumer, line):
-        """Scan over and parse GenBank LOCUS line (PRIVATE).
-
-        This must cope with several variants, primarily the old and new column
-        based standards from GenBank. Additionally EnsEMBL produces GenBank
-        files where the LOCUS line is space separated rather that following
-        the column based layout.
-
-        We also try to cope with GenBank like files with partial LOCUS lines.
-
-        As of release 229.0, the columns are no longer strictly in a given
-        position. See GenBank format release notes:
-
-            "Historically, the LOCUS line has had a fixed length and its
-            elements have been presented at specific column positions...
-            But with the anticipated increases in the lengths of accession
-            numbers, and the advent of sequences that are gigabases long,
-            maintaining the column positions will not always be possible and
-            the overall length of the LOCUS line could exceed 79 characters."
-
-        """
-        #####################################
-        # LOCUS line                        #
-        #####################################
-
         assert line.startswith(self.RECORD_START), ValueError(
             "LOCUS line does not start correctly:\n" + line
         )
@@ -1334,37 +1296,8 @@ class GenBankScanner(InsdcScanner):
             consumer.date(res["date"])
 
     def _feed_header_lines(self, consumer, lines):
-        # Following dictionary maps GenBank lines to the associated
-        # consumer methods - the special cases like LOCUS where one
-        # genbank line triggers several consumer calls have to be
-        # handled individually.
-        consumer_dict = {
-            "DEFINITION": "definition",
-            "ACCESSION": "accession",
-            "NID": "nid",
-            "PID": "pid",
-            "DBSOURCE": "db_source",
-            "KEYWORDS": "keywords",
-            "SEGMENT": "segment",
-            "SOURCE": "source",
-            "AUTHORS": "authors",
-            "CONSRTM": "consrtm",
-            "PROJECT": "project",
-            "TITLE": "title",
-            "JOURNAL": "journal",
-            "MEDLINE": "medline_id",
-            "PUBMED": "pubmed_id",
-            "REMARK": "remark",
-        }
-        # We have to handle the following specially:
-        # ORIGIN (locus, size, residue_type, data_file_division and date)
-        # COMMENT (comment)
-        # VERSION (version and gi)
-        # DBLINK (database links like projects, newlines important)
-        # REFERENCE (eference_num and reference_bases)
-        # ORGANISM (organism and taxonomy)
         lines = [_f for _f in lines if _f]
-        lines.append("")  # helps avoid getting StopIteration all the time
+        lines.append("")
         line_iter = iter(lines)
         try:
             line = next(line_iter)
@@ -1375,95 +1308,57 @@ class GenBankScanner(InsdcScanner):
                 data = line[self.GENBANK_INDENT :].strip()
 
                 if line_type == "VERSION":
-                    # Need to call consumer.version(), and maybe also consumer.gi() as well.
-                    # e.g.
-                    # VERSION     AC007323.5  GI:6587720
                     while "  " in data:
                         data = data.replace("  ", " ")
                     if " GI:" not in data:
                         consumer.version(data)
                     else:
-                        if self.debug:
-                            print(
-                                "Version ["
-                                + data.split(" GI:")[0]
-                                + "], gi ["
-                                + data.split(" GI:")[1]
-                                + "]"
-                            )
+                        logging.debug(
+                            "Version ["
+                            + data.split(" GI:")[0]
+                            + "], gi ["
+                            + data.split(" GI:")[1]
+                            + "]"
+                        )
                         consumer.version(data.split(" GI:")[0])
                         consumer.gi(data.split(" GI:")[1])
-                    # Read in the next line!
                     line = next(line_iter)
                 elif line_type == "DBLINK":
-                    # Need to call consumer.dblink() for each line, e.g.
-                    # DBLINK      Project: 57779
-                    #             BioProject: PRJNA57779
                     consumer.dblink(data.strip())
-                    # Read in the next line, and see if its more of the DBLINK section:
                     while True:
                         line = next(line_iter)
                         if line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            # Add this continuation to the data string
                             consumer.dblink(line[self.GENBANK_INDENT :].strip())
                         else:
-                            # End of the DBLINK, leave this text in the variable "line"
                             break
                 elif line_type == "REFERENCE":
-                    if self.debug > 1:
-                        print("Found reference [" + data + "]")
-                    # Need to call consumer.reference_num() and consumer.reference_bases()
-                    # e.g.
-                    # REFERENCE   1  (bases 1 to 86436)
-                    #
-                    # Note that this can be multiline, see Bug 1968, e.g.
-                    #
-                    # REFERENCE   42 (bases 1517 to 1696; 3932 to 4112; 17880 to 17975; 21142 to
-                    #             28259)
-                    #
-                    # For such cases we will call the consumer once only.
+                    logging.debug("Found reference [" + data + "]")
                     data = data.strip()
 
-                    # Read in the next line, and see if its more of the reference:
                     while True:
                         line = next(line_iter)
                         if line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            # Add this continuation to the data string
                             data += " " + line[self.GENBANK_INDENT :]
-                            if self.debug > 1:
-                                print("Extended reference text [" + data + "]")
+                            logging.debug("Extended reference text [" + data + "]")
                         else:
-                            # End of the reference, leave this text in the variable "line"
                             break
 
-                    # We now have all the reference line(s) stored in a string, data,
-                    # which we pass to the consumer
                     while "  " in data:
                         data = data.replace("  ", " ")
                     if " " not in data:
-                        if self.debug > 2:
-                            print('Reference number "' + data + '"')
+                        logging.debug('Reference number "' + data + '"')
                         consumer.reference_num(data)
                     else:
-                        if self.debug > 2:
-                            print(
-                                'Reference number "'
-                                + data[: data.find(" ")]
-                                + '", "'
-                                + data[data.find(" ") + 1 :]
-                                + '"'
-                            )
+                        logging.debug(
+                            'Reference number "'
+                            + data[: data.find(" ")]
+                            + '", "'
+                            + data[data.find(" ") + 1 :]
+                            + '"'
+                        )
                         consumer.reference_num(data[: data.find(" ")])
                         consumer.reference_bases(data[data.find(" ") + 1 :])
                 elif line_type == "ORGANISM":
-                    # Typically the first line is the organism, and subsequent lines
-                    # are the taxonomy lineage.  However, given longer and longer
-                    # species names (as more and more strains and sub strains get
-                    # sequenced) the oragnism name can now get wrapped onto multiple
-                    # lines.  The NCBI say we have to recognise the lineage line by
-                    # the presence of semi-colon delimited entries.  In the long term,
-                    # they are considering adding a new keyword (e.g. LINEAGE).
-                    # See Bug 2591 for details.
                     organism_data = data
                     lineage_data = ""
                     while True:
@@ -1472,41 +1367,28 @@ class GenBankScanner(InsdcScanner):
                             if lineage_data or ";" in line:
                                 lineage_data += " " + line[self.GENBANK_INDENT :]
                             elif line[self.GENBANK_INDENT :].strip() == ".":
-                                # No lineage data, just . place holder
                                 pass
                             else:
                                 organism_data += (
                                     " " + line[self.GENBANK_INDENT :].strip()
                                 )
                         else:
-                            # End of organism and taxonomy
                             break
                     consumer.organism(organism_data)
-                    if lineage_data.strip() == "" and self.debug > 1:
-                        print("Taxonomy line(s) missing or blank")
+                    if lineage_data.strip() == "":
+                        logging.debug("Taxonomy line(s) missing or blank")
                     consumer.taxonomy(lineage_data.strip())
                     del organism_data, lineage_data
                 elif line_type == "COMMENT":
-                    # A COMMENT can either be plain text or tabular (Structured Comment),
-                    # or contain both. Multi-line comments are common. The code calls
-                    # consumer.comment() once with a list where each entry
-                    # is a line. If there's a structured comment consumer.structured_comment()
-                    # is called with a dict of dicts where the secondary key/value pairs are
-                    # the same as those in the structured comment table. The primary key is
-                    # the title or header of the table (e.g. Assembly-Data, FluData). See
-                    # http://www.ncbi.nlm.nih.gov/genbank/structuredcomment
-                    # for more information on Structured Comments.
                     data = line[self.GENBANK_INDENT :]
-                    if self.debug > 1:
-                        print("Found comment")
+                    logging.debug("Found comment")
                     comment_list = []
                     structured_comment_dict = OrderedDict()
                     regex = r"([^#]+){0}$".format(self.STRUCTURED_COMMENT_START)
                     structured_comment_key = re.search(regex, data)
                     if structured_comment_key is not None:
                         structured_comment_key = structured_comment_key.group(1)
-                        if self.debug > 1:
-                            print("Found Structured Comment")
+                        logging.debug("Found Structured Comment")
                     else:
                         comment_list.append(data)
 
@@ -1541,15 +1423,13 @@ class GenBankScanner(InsdcScanner):
                                 structured_comment_dict[structured_comment_key][
                                     match.group(1)
                                 ] = match.group(2)
-                                if self.debug > 2:
-                                    print(
-                                        "Structured Comment continuation [" + data + "]"
-                                    )
+                                logging.debug(
+                                    "Structured Comment continuation [" + data + "]"
+                                )
                             elif (
                                 structured_comment_key is not None
                                 and self.STRUCTURED_COMMENT_END not in data
                             ):
-                                # The current structured comment has a multiline value
                                 previous_value_line = structured_comment_dict[
                                     structured_comment_key
                                 ][match.group(1)]
@@ -1557,44 +1437,29 @@ class GenBankScanner(InsdcScanner):
                                     match.group(1)
                                 ] = (previous_value_line + " " + line.strip())
                             elif self.STRUCTURED_COMMENT_END in data:
-                                # End of structured comment
                                 structured_comment_key = None
                             else:
                                 comment_list.append(data)
-                                if self.debug > 2:
-                                    print("Comment continuation [" + data + "]")
+                                logging.debug("Comment continuation [" + data + "]")
                         else:
-                            # End of the comment
                             break
                     if comment_list:
                         consumer.comment(comment_list)
                     if structured_comment_dict:
                         consumer.structured_comment(structured_comment_dict)
                     del comment_list, structured_comment_key, structured_comment_dict
-                elif line_type in consumer_dict:
-                    # It's a semi-automatic entry!
-                    # Now, this may be a multi line entry...
+                elif line_type in self.CONSUMER_DICT:
                     while True:
                         line = next(line_iter)
                         if line[0 : self.GENBANK_INDENT] == self.GENBANK_SPACER:
                             data += " " + line[self.GENBANK_INDENT :]
                         else:
-                            # We now have all the data for this entry:
-
-                            # The DEFINITION field must ends with a period
-                            # # see ftp://ftp.ncbi.nih.gov/genbank/gbrel.txt [3.4.5]
-                            # and discussion https://github.com/biopython/biopython/pull/616
-                            # We consider this period belong to the syntax, not to the data
-                            # So remove it if it exist
                             if line_type == "DEFINITION" and data.endswith("."):
                                 data = data[:-1]
-                            getattr(consumer, consumer_dict[line_type])(data)
-                            # End of continuation - return to top of loop!
+                            getattr(consumer, self.CONSUMER_DICT[line_type])(data)
                             break
                 else:
-                    if self.debug:
-                        print("Ignoring GenBank header line:\n" % line)
-                    # Read in next line
+                    logging.debug("Ignoring GenBank header line:\n" % line)
                     line = next(line_iter)
         except StopIteration:
             raise ValueError("Problem in header") from None
@@ -1608,14 +1473,12 @@ class GenBankScanner(InsdcScanner):
                 if line.startswith("BASE COUNT"):
                     line = line[10:].strip()
                     if line:
-                        if self.debug:
-                            print("base_count = " + line)
+                        logging.debug("base_count = " + line)
                         consumer.base_count(line)
                 if line.startswith("ORIGIN"):
                     line = line[6:].strip()
                     if line:
-                        if self.debug:
-                            print("origin_name = " + line)
+                        logging.debug("origin_name = " + line)
                         consumer.origin_name(line)
                 if line.startswith("TLS "):
                     line = line[3:].strip()

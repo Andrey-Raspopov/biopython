@@ -95,7 +95,7 @@ def GenBankIterator(source):
             raise ValueError("GenBank files must be opened in text mode.") from None
 
     try:
-        records = GenBankScanner(debug=0).parse_records(handle)
+        records = GenBankScanner().parse_records(handle)
         yield from records
     finally:
         if handle is not source:
@@ -153,7 +153,7 @@ def EmblIterator(source):
             raise ValueError("EMBL files must be opened in text mode.") from None
 
     try:
-        records = EmblScanner(debug=0).parse_records(handle)
+        records = EmblScanner().parse_records(handle)
         yield from records
     finally:
         if handle is not source:
@@ -178,7 +178,7 @@ def ImgtIterator(source):
             raise ValueError("IMGT files must be opened in text mode.") from None
 
     try:
-        records = _ImgtScanner(debug=0).parse_records(handle)
+        records = _ImgtScanner().parse_records(handle)
         yield from records
     finally:
         if handle is not source:
@@ -202,7 +202,7 @@ def GenBankCdsFeatureIterator(source, alphabet=Alphabet.generic_protein):
             raise ValueError("GenBank files must be opened in text mode.") from None
 
     try:
-        records = GenBankScanner(debug=0).parse_cds_features(handle, alphabet)
+        records = GenBankScanner().parse_cds_features(handle, alphabet)
         yield from records
     finally:
         if handle is not source:
@@ -226,7 +226,7 @@ def EmblCdsFeatureIterator(source, alphabet=Alphabet.generic_protein):
             raise ValueError("EMBL files must be opened in text mode.") from None
 
     try:
-        records = EmblScanner(debug=0).parse_cds_features(handle, alphabet)
+        records = EmblScanner().parse_cds_features(handle, alphabet)
         yield from records
     finally:
         if handle is not source:

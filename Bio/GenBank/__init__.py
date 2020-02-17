@@ -508,14 +508,10 @@ class FeatureParser:
     Please use Bio.SeqIO.parse(...) or Bio.SeqIO.read(...) instead.
     """
 
-    def __init__(self, debug_level=0, use_fuzziness=1, feature_cleaner=_cleaner):
+    def __init__(self, use_fuzziness=1, feature_cleaner=_cleaner):
         """Initialize a GenBank parser and Feature consumer.
 
         Arguments:
-         - debug_level - An optional argument that species the amount of
-           debugging information the parser should spit out. By default we have
-           no debugging info (the fastest way to do things), but if you want
-           you can set this as high as two and see exactly where a parse fails.
          - use_fuzziness - Specify whether or not to use fuzzy representations.
            The default is 1 (use fuzziness).
          - feature_cleaner - A class which will be used to clean out the
@@ -524,7 +520,7 @@ class FeatureParser:
            is used by default.
 
         """
-        self._scanner = GenBankScanner(debug_level)
+        self._scanner = GenBankScanner()
         self.use_fuzziness = use_fuzziness
         self._cleaner = feature_cleaner
 
@@ -545,17 +541,9 @@ class RecordParser:
     instead.
     """
 
-    def __init__(self, debug_level=0):
-        """Initialize the parser.
-
-        Arguments:
-         - debug_level - An optional argument that species the amount of
-           debugging information the parser should spit out. By default we have
-           no debugging info (the fastest way to do things), but if you want
-           you can set this as high as two and see exactly where a parse fails.
-
-        """
-        self._scanner = GenBankScanner(debug_level)
+    def __init__(self):
+        """Initialize the parser."""
+        self._scanner = GenBankScanner()
 
     def parse(self, handle):
         """Parse the specified handle into a GenBank record."""

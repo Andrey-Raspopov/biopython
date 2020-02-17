@@ -68,7 +68,7 @@ class TestBasics(unittest.TestCase):
         # locations won't work exactly
         # don't test writing on blank_seq because it lacks a sequence type
         # don't test dbsource_wrap because it is a junky RefSeq file
-        record_parser = GenBank.RecordParser(debug_level=0)
+        record_parser = GenBank.RecordParser()
         for filename in filenames:
             path = os.path.join("GenBank", filename)
             with open(path) as cur_handle, open(path) as compare_handle:
@@ -130,7 +130,7 @@ class TestBasics(unittest.TestCase):
 class TestRecordParser(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.rec_parser = GenBank.RecordParser(debug_level=0)
+        cls.rec_parser = GenBank.RecordParser()
 
     def perform_record_parser_test(
         self,
@@ -394,7 +394,7 @@ class TestRecordParser(unittest.TestCase):
                         ("/protein_id=", '"CAB39890.1"'),
                         ("/db_xref=", '"GI:4538893"'),
                         ("/translation=", '"DKAKDAAAAAGASAQQAGKNISDAAAGGVNFVKEKTG"'),
-                        ),
+                    ),
                 ),
                 ("intron", "49..142", (("/gene=", '"csp14"'), ("/number=", "2"))),
                 ("exon", "143..206", (("/gene=", '"csp14"'), ("/number=", "3"))),
@@ -1519,9 +1519,7 @@ class TestRecordParser(unittest.TestCase):
             record = next(records)
             length = 2007
             locus = "AB000048"
-            definition = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            definition = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             accession = ["AB000048"]
             titles = (
                 "Evolutionary pattern of feline panleukopenia virus differs from that of canine parvovirus",
@@ -1558,9 +1556,7 @@ class TestRecordParser(unittest.TestCase):
             record = next(records)
             length = 2007
             locus = "AB000049"
-            definition = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            definition = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             accession = ["AB000049"]
             titles = (
                 "Evolutionary pattern of feline panleukopenia virus differs that of canine parvovirus",
@@ -1597,7 +1593,9 @@ class TestRecordParser(unittest.TestCase):
             record = next(records)
             length = 1755
             locus = "AB000050"
-            definition = "Feline panleukopenia virus DNA for capsid protein 2, complete cds"
+            definition = (
+                "Feline panleukopenia virus DNA for capsid protein 2, complete cds"
+            )
             accession = ["AB000050"]
             titles = (
                 "Evolutionary pattern of feline panleukopenia virus differs from that of canine parvovirus",
@@ -2507,7 +2505,7 @@ class TestRecordParser(unittest.TestCase):
 class TestFeatureParser(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.feat_parser = GenBank.FeatureParser(debug_level=0)
+        cls.feat_parser = GenBank.FeatureParser()
 
     def shorten(self, seq):
         if len(seq) <= 60:
@@ -4944,9 +4942,7 @@ qualifiers:
             seq = "ATGTCTGGCAACCAGTATACTGAGGAAGTTATGGAGGGAGTAAATTGGTTAAAG...TAA"
             id = "AB000048.1"
             name = "AB000048"
-            description = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            description = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             annotations = {
                 "accessions": ["AB000048"],
                 "data_file_division": "VRL",
@@ -5015,9 +5011,7 @@ qualifiers:
             seq = "ATGTCTGGCAACCAGTATACTGAGGAAGTTATGGAGGGAGTAAATTGGTTAAAG...TAA"
             id = "AB000049.1"
             name = "AB000049"
-            description = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            description = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             annotations = {
                 "accessions": ["AB000049"],
                 "data_file_division": "VRL",
