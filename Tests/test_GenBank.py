@@ -6336,7 +6336,7 @@ class GenBankTests(unittest.TestCase):
     def test_invalid_product_line_raises_value_error(self):
         """Parsing invalid product line."""
         path = "GenBank/invalid_product.gb"
-        self.assertRaises(ValueError, SeqIO.read, path, "genbank")
+        self.assertRaises(AssertionError, SeqIO.read, path, "genbank")
 
     def test_genbank_read(self):
         """GenBank.read(...) simple test."""
@@ -6361,7 +6361,7 @@ class GenBankTests(unittest.TestCase):
         """GenBank.read(...) error on malformed file."""
         path = "GenBank/no_origin_no_end.gb"
         with open(path) as handle:
-            self.assertRaises(ValueError, GenBank.read, handle)
+            self.assertRaises(AssertionError, GenBank.read, handle)
 
     # Evil hack with 000 to manipulate sort order to ensure this is tested
     # first (otherwise something silences the warning)
@@ -6960,7 +6960,7 @@ KEYWORDS    """
                 long_in_tmp.seek(0)
                 record = SeqIO.read(long_in_tmp, "genbank")
 
-            self.assertRaises(ValueError, read_longer_than_maxsize)
+            self.assertRaises(AssertionError, read_longer_than_maxsize)
 
 
 class LineOneTests(unittest.TestCase):

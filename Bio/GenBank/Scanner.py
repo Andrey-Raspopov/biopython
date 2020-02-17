@@ -88,9 +88,9 @@ class InsdcScanner:
             if not line:
                 logging.debug("End of file")
                 return None
-            if isinstance(line[0], int):
-                # Same exception as for FASTQ files
-                raise ValueError("Is this handle in binary mode not text mode?")
+            assert not isinstance(
+                line[0], int
+            ), "Is this handle in binary mode not text mode?"
             if line[: self.HEADER_WIDTH] == self.RECORD_START:
                 logging.debug("Found the start of a record:\n" + line)
                 break
@@ -111,14 +111,14 @@ class InsdcScanner:
 
         Assumes you have just read in the ID/LOCUS line.
         """
-        if self.line[: self.HEADER_WIDTH] != self.RECORD_START:
-            raise ValueError("Not at start of record")
+        assert (
+            self.line[: self.HEADER_WIDTH] == self.RECORD_START
+        ), "Not at start of record"
 
         header_lines = []
         while True:
             line = self.handle.readline()
-            if not line:
-                raise ValueError("Premature end of line during sequence data")
+            assert line, "Premature end of line during sequence data"
             line = line.rstrip()
             if line in self.FEATURE_START_MARKERS:
                 logging.debug("Found feature table")
@@ -126,8 +126,7 @@ class InsdcScanner:
             if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
                 logging.debug("Found start of sequence")
                 break
-            if line == "//":
-                raise ValueError("Premature end of sequence data marker '//' found")
+            assert line != "//", "Premature end of sequence data marker '//' found"
             header_lines.append(line)
         self.line = line
         return header_lines
@@ -152,14 +151,12 @@ class InsdcScanner:
         features = []
         line = self.line
         while True:
-            if not line:
-                raise ValueError("Premature end of line during features table")
+            assert line, "Premature end of line during features table"
             if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
                 logging.debug("Found start of sequence")
                 break
             line = line.rstrip()
-            if line == "//":
-                raise ValueError("Premature end of features table, marker '//' found")
+            assert line != "//", "Premature end of features table, marker '//' found"
             if line in self.FEATURE_END_MARKERS:
                 logging.debug("Found end of features")
                 line = self.handle.readline()
@@ -333,8 +330,7 @@ class InsdcScanner:
                 else:
                     assert len(qualifiers) > 0
                     assert key == qualifiers[-1][0]
-                    if qualifiers[-1][1] is None:
-                        raise StopIteration
+                    assert qualifiers[-1][1], StopIteration
                     qualifiers[-1] = (key, qualifiers[-1][1] + "\n" + line)
             return feature_key, feature_location, qualifiers
         except StopIteration:
@@ -347,16 +343,15 @@ class InsdcScanner:
         if self.line in self.FEATURE_END_MARKERS:
             while self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS:
                 self.line = self.handle.readline()
-                if not self.line:
-                    raise ValueError("Premature end of file")
+                assert self.line, "Premature end of file"
                 self.line = self.line.rstrip()
 
-        if self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS:
-            raise ValueError("Not at start of sequence")
+        assert (
+            self.line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS
+        ), "Not at start of sequence"
         while True:
             line = self.handle.readline()
-            if not line:
-                raise ValueError("Premature end of line during sequence data")
+            assert line, "Premature end of line during sequence data"
             line = line.rstrip()
             if line == "//":
                 break
@@ -489,16 +484,13 @@ class InsdcScanner:
                 record = self.parse(handle, do_features)
                 if record is None:
                     break
-                if record.id is None:
-                    raise ValueError(
-                        "Failed to parse the record's ID. Invalid ID line?"
-                    )
-                if record.name == "<unknown name>":
-                    raise ValueError(
-                        "Failed to parse the record's name. Invalid ID line?"
-                    )
-                if record.description == "<unknown description>":
-                    raise ValueError("Failed to parse the record's description")
+                assert record.id, "Failed to parse the record's ID. Invalid ID line?"
+                assert (
+                    record.name != "<unknown name>"
+                ), "Failed to parse the record's name. Invalid ID line?"
+                assert (
+                    record.description != "<unknown description>"
+                ), "Failed to parse the record's description"
                 yield record
 
     def parse_cds_features(
@@ -612,40 +604,34 @@ class EmblScanner(InsdcScanner):
 
     def parse_footer(self):
         """Return a tuple containing a list of any misc strings, and the sequence."""
-        if self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS:
-            raise ValueError("Footer format unexpected: '%s'" % self.line)
+        assert self.line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS, (
+            "Footer format unexpected: '%s'" % self.line
+        )
 
-        # Note that the SQ line can be split into several lines...
         misc_lines = []
         while self.line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
             misc_lines.append(self.line)
             self.line = self.handle.readline()
-            if not self.line:
-                raise ValueError("Premature end of file")
+            assert self.line, "Premature end of file"
             self.line = self.line.rstrip()
 
-        if not (
+        assert (
             self.line[: self.HEADER_WIDTH] == " " * self.HEADER_WIDTH
             or self.line.strip() == "//"
-        ):
-            raise ValueError("Unexpected content after SQ or CO line: %r" % self.line)
+        ), ("Unexpected content after SQ or CO line: %r" % self.line)
 
         seq_lines = []
         line = self.line
         while True:
-            if not line:
-                raise ValueError("Premature end of file in sequence data")
+            assert line, "Premature end of file in sequence data"
             line = line.strip()
-            if not line:
-                raise ValueError("Blank line in sequence data")
+            assert line, "Blank line in sequence data"
             if line == "//":
                 break
-            if self.line[: self.HEADER_WIDTH] != (" " * self.HEADER_WIDTH):
-                raise ValueError(
-                    "Problem with characters in header line, "
-                    " or incorrect header width: " + self.line
-                )
-            # Remove tailing number now, remove spaces later
+            assert self.line[: self.HEADER_WIDTH] == (" " * self.HEADER_WIDTH), (
+                "Problem with characters in header line, or incorrect header width: "
+                + self.line
+            )
             linersplit = line.rsplit(None, 1)
             if len(linersplit) == 2 and linersplit[1].isdigit():
                 seq_lines.append(linersplit[0])
@@ -669,13 +655,10 @@ class EmblScanner(InsdcScanner):
             self._feed_first_line_new(consumer, line)
         elif line[self.HEADER_WIDTH :].count(";") == 3:
             if line.rstrip().endswith(" SQ"):
-                # EMBL-bank patent data
                 self._feed_first_line_patents(consumer, line)
             else:
-                # Looks like the pre 2006 style
                 self._feed_first_line_old(consumer, line)
         elif line[self.HEADER_WIDTH :].count(";") == 2:
-            # Looks like KIKO patent data
             self._feed_first_line_patents_kipo(consumer, line)
         else:
             raise ValueError("Did not recognise the ID line layout:\n" + line)
@@ -957,19 +940,11 @@ class EmblScanner(InsdcScanner):
                         if not line:
                             break
                         elif line.startswith("CO   "):
-                            # Don't need to preseve the whitespace here.
                             contig_location += line[5:].strip()
                         else:
-                            raise ValueError(
-                                "Expected CO (contig) continuation line, got:\n" + line
-                            )
+                            raise "Expected CO (contig) continuation line, got:\n" + line
                     consumer.contig_location(contig_location)
                 if line.startswith("SQ   Sequence "):
-                    # e.g.
-                    # SQ   Sequence 219 BP; 82 A; 48 C; 33 G; 45 T; 11 other;
-                    #
-                    # Or, EMBL-bank patent, e.g.
-                    # SQ   Sequence 465 AA; 3963407aa91d3a0d622fec679a4524e0; MD5;
                     self._feed_seq_length(
                         consumer, line[14:].rstrip().rstrip(";").split(";", 1)[0]
                     )
@@ -1073,14 +1048,12 @@ class _ImgtScanner(EmblScanner):
         features = []
         line = self.line
         while True:
-            if not line:
-                raise ValueError("Premature end of line during features table")
+            assert line, "Premature end of line during features table"
             if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
                 logging.debug("Found start of sequence")
                 break
             line = line.rstrip()
-            if line == "//":
-                raise ValueError("Premature end of features table, marker '//' found")
+            assert line != "//", "Premature end of features table, marker '//' found"
             if line in self.FEATURE_END_MARKERS:
                 logging.debug("Found end of features")
                 line = self.handle.readline()
@@ -1103,9 +1076,6 @@ class _ImgtScanner(EmblScanner):
                 try:
                     feature_key, location_start = line[2:].strip().split()
                 except ValueError:
-                    # e.g. "FT   TRANSMEMBRANE-REGION2163..2240\n"
-                    # Assume indent of 25 as per IMGT spec, with the location
-                    # start in column 26 (one-based).
                     feature_key = line[2:25].strip()
                     location_start = line[25:].strip()
                 feature_lines = [location_start]
@@ -1182,8 +1152,9 @@ class GenBankScanner(InsdcScanner):
 
     def parse_footer(self):
         """Return a tuple containing a list of any misc strings, and the sequence."""
-        if self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS:
-            raise ValueError("Footer format unexpected:  '%s'" % self.line)
+        assert self.line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS, (
+            "Footer format unexpected:  '%s'" % self.line
+        )
 
         misc_lines = []
         while (
@@ -1193,15 +1164,13 @@ class GenBankScanner(InsdcScanner):
         ):
             misc_lines.append(self.line.rstrip())
             self.line = self.handle.readline()
-            if not self.line:
-                raise ValueError("Premature end of file")
+            assert self.line, "Premature end of file"
             self.line = self.line
 
-        if self.line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
-            raise ValueError("Eh? '%s'" % self.line)
+        assert self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS, (
+            "Eh? '%s'" % self.line
+        )
 
-        # Now just consume the sequence lines until reach the // marker
-        # or a CONTIG line
         seq_lines = []
         line = self.line
         while True:
@@ -1227,8 +1196,9 @@ class GenBankScanner(InsdcScanner):
                     "Invalid indentation for sequence line", BiopythonParserWarning
                 )
                 line = line[1:]
-                if len(line) > 9 and line[9:10] != " ":
-                    raise ValueError("Sequence line mal-formed, '%s'" % line)
+                assert len(line) <= 9 or line[9:10] == " ", (
+                    "Sequence line mal-formed, '%s'" % line
+                )
             seq_lines.append(line[10:])  # remove spaces later
             line = self.handle.readline()
 
@@ -1237,7 +1207,7 @@ class GenBankScanner(InsdcScanner):
         return misc_lines, "".join(seq_lines).replace(" ", "")
 
     def _feed_first_line(self, consumer, line):
-        assert line.startswith(self.RECORD_START), ValueError(
+        assert line.startswith(self.RECORD_START), (
             "LOCUS line does not start correctly:\n" + line
         )
         pattern = (
@@ -1274,12 +1244,10 @@ class GenBankScanner(InsdcScanner):
             )
         consumer.locus(res["locus_name"])
         if res["size"]:
-            if int(res["size"]) > sys.maxsize:
-                raise ValueError(
-                    "Tried to load a sequence with a length %s, "
-                    "your installation of python can only load "
-                    "sequences of length %s" % (res["size"], sys.maxsize)
-                )
+            assert int(res["size"]) <= sys.maxsize, (
+                "Tried to load a sequence with a length %s, your installation of python can only load sequences of length %s"
+                % (res["size"], sys.maxsize)
+            )
             consumer.size(res["size"])
         if res["mol_type"]:
             consumer.molecule_type(res["mol_type"])
@@ -1465,7 +1433,6 @@ class GenBankScanner(InsdcScanner):
             raise ValueError("Problem in header") from None
 
     def _feed_misc_lines(self, consumer, lines):
-        # Deals with a few misc lines between the features and the sequence
         lines.append("")
         line_iter = iter(lines)
         try:
@@ -1500,10 +1467,8 @@ class GenBankScanner(InsdcScanner):
                         if not line:
                             break
                         elif line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            # Don't need to preseve the whitespace here.
                             contig_location += line[self.GENBANK_INDENT :].rstrip()
                         elif line.startswith("ORIGIN"):
-                            # Strange, seen this in GenPept files via Entrez gbwithparts
                             line = line[6:].strip()
                             if line:
                                 consumer.origin_name(line)
