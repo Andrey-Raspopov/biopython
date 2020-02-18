@@ -1265,172 +1265,149 @@ class GenBankScanner(InsdcScanner):
 
     def _feed_header_lines(self, consumer, lines):
         lines = [_f for _f in lines if _f]
-        lines.append("")
-        line_iter = iter(lines)
-        try:
-            line = next(line_iter)
-            while True:
-                if not line:
-                    break
-                line_type = line[: self.GENBANK_INDENT].strip()
-                data = line[self.GENBANK_INDENT :].strip()
-
-                if line_type == "VERSION":
-                    while "  " in data:
-                        data = data.replace("  ", " ")
-                    if " GI:" not in data:
-                        consumer.version(data)
-                    else:
-                        logging.debug(
-                            "Version ["
-                            + data.split(" GI:")[0]
-                            + "], gi ["
-                            + data.split(" GI:")[1]
-                            + "]"
-                        )
-                        consumer.version(data.split(" GI:")[0])
-                        consumer.gi(data.split(" GI:")[1])
-                    line = next(line_iter)
-                elif line_type == "DBLINK":
-                    consumer.dblink(data.strip())
-                    while True:
-                        line = next(line_iter)
-                        if line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            consumer.dblink(line[self.GENBANK_INDENT :].strip())
-                        else:
-                            break
-                elif line_type == "REFERENCE":
-                    logging.debug("Found reference [" + data + "]")
-                    data = data.strip()
-
-                    while True:
-                        line = next(line_iter)
-                        if line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            data += " " + line[self.GENBANK_INDENT :]
-                            logging.debug("Extended reference text [" + data + "]")
-                        else:
-                            break
-
-                    while "  " in data:
-                        data = data.replace("  ", " ")
-                    if " " not in data:
-                        logging.debug('Reference number "' + data + '"')
-                        consumer.reference_num(data)
-                    else:
-                        logging.debug(
-                            'Reference number "'
-                            + data[: data.find(" ")]
-                            + '", "'
-                            + data[data.find(" ") + 1 :]
-                            + '"'
-                        )
-                        consumer.reference_num(data[: data.find(" ")])
-                        consumer.reference_bases(data[data.find(" ") + 1 :])
-                elif line_type == "ORGANISM":
-                    organism_data = data
-                    lineage_data = ""
-                    while True:
-                        line = next(line_iter)
-                        if line[0 : self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            if lineage_data or ";" in line:
-                                lineage_data += " " + line[self.GENBANK_INDENT :]
-                            elif line[self.GENBANK_INDENT :].strip() == ".":
-                                pass
-                            else:
-                                organism_data += (
-                                    " " + line[self.GENBANK_INDENT :].strip()
-                                )
-                        else:
-                            break
-                    consumer.organism(organism_data)
-                    if lineage_data.strip() == "":
-                        logging.debug("Taxonomy line(s) missing or blank")
-                    consumer.taxonomy(lineage_data.strip())
-                    del organism_data, lineage_data
-                elif line_type == "COMMENT":
-                    data = line[self.GENBANK_INDENT :]
-                    logging.debug("Found comment")
-                    comment_list = []
-                    structured_comment_dict = OrderedDict()
-                    regex = r"([^#]+){0}$".format(self.STRUCTURED_COMMENT_START)
-                    structured_comment_key = re.search(regex, data)
-                    if structured_comment_key is not None:
-                        structured_comment_key = structured_comment_key.group(1)
-                        logging.debug("Found Structured Comment")
-                    else:
-                        comment_list.append(data)
-
-                    while True:
-                        line = next(line_iter)
-                        data = line[self.GENBANK_INDENT :]
-                        if line[0 : self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            if self.STRUCTURED_COMMENT_START in data:
-                                regex = r"([^#]+){0}$".format(
-                                    self.STRUCTURED_COMMENT_START
-                                )
-                                structured_comment_key = re.search(regex, data)
-                                if structured_comment_key is not None:
-                                    structured_comment_key = structured_comment_key.group(
-                                        1
-                                    )
-                                else:
-                                    comment_list.append(data)
-                            elif (
-                                structured_comment_key is not None
-                                and self.STRUCTURED_COMMENT_DELIM in data
-                            ):
-                                match = re.search(
-                                    r"(.+?)\s*{0}\s*(.+)".format(
-                                        self.STRUCTURED_COMMENT_DELIM
-                                    ),
-                                    data,
-                                )
-                                structured_comment_dict.setdefault(
-                                    structured_comment_key, OrderedDict()
-                                )
-                                structured_comment_dict[structured_comment_key][
-                                    match.group(1)
-                                ] = match.group(2)
-                                logging.debug(
-                                    "Structured Comment continuation [" + data + "]"
-                                )
-                            elif (
-                                structured_comment_key is not None
-                                and self.STRUCTURED_COMMENT_END not in data
-                            ):
-                                previous_value_line = structured_comment_dict[
-                                    structured_comment_key
-                                ][match.group(1)]
-                                structured_comment_dict[structured_comment_key][
-                                    match.group(1)
-                                ] = (previous_value_line + " " + line.strip())
-                            elif self.STRUCTURED_COMMENT_END in data:
-                                structured_comment_key = None
-                            else:
-                                comment_list.append(data)
-                                logging.debug("Comment continuation [" + data + "]")
-                        else:
-                            break
-                    if comment_list:
-                        consumer.comment(comment_list)
-                    if structured_comment_dict:
-                        consumer.structured_comment(structured_comment_dict)
-                    del comment_list, structured_comment_key, structured_comment_dict
-                elif line_type in self.CONSUMER_DICT:
-                    while True:
-                        line = next(line_iter)
-                        if line[0 : self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            data += " " + line[self.GENBANK_INDENT :]
-                        else:
-                            if line_type == "DEFINITION" and data.endswith("."):
-                                data = data[:-1]
-                            getattr(consumer, self.CONSUMER_DICT[line_type])(data)
-                            break
+        data_acc = []
+        working_line_type = None
+        for line in lines:
+            line_type = line[: self.GENBANK_INDENT].strip()
+            data = line[self.GENBANK_INDENT :].strip()
+            if working_line_type:
+                if line_type == "":
+                    data_acc.append(data)
                 else:
-                    logging.debug("Ignoring GenBank header line:\n" % line)
-                    line = next(line_iter)
-        except StopIteration:
-            raise ValueError("Problem in header") from None
+                    self._process_header_data(consumer, working_line_type, data_acc)
+                    working_line_type = line_type
+                    data_acc = [data]
+            else:
+                data_acc.append(data)
+                working_line_type = line_type
+        self._process_header_data(consumer, working_line_type, data_acc)
+
+    def _process_header_data(self, consumer, line_type, data):
+        if line_type == "VERSION":
+            self._feed_header_version(consumer, data[0])
+        elif line_type == "DBLINK":
+            self._feed_header_dblink(consumer, data)
+        elif line_type == "REFERENCE":
+            self._feed_header_reference(consumer, data)
+        elif line_type == "ORGANISM":
+            self._feed_header_organism(consumer, data)
+        elif line_type == "COMMENT":
+            self._feed_header_comment(consumer, data)
+        elif line_type in self.CONSUMER_DICT:
+            self._feed_header_common(consumer, data, line_type)
+        else:
+            logging.debug("Ignoring GenBank header line:\n" % data)
+
+    def _feed_header_common(self, consumer, data, line_type):
+        data = " ".join(data)
+        if line_type == "DEFINITION" and data.endswith("."):
+            data = data[:-1]
+        getattr(consumer, self.CONSUMER_DICT[line_type])(data)
+
+    def _feed_header_comment(self, consumer, data):
+        logging.debug("Found comment")
+        comment_list = []
+        structured_comment_key = None
+        structured_comment_dict = OrderedDict()
+        for line in data:
+            if self.STRUCTURED_COMMENT_START in line:
+                pattern = r"([^#]+){0}$".format(self.STRUCTURED_COMMENT_START)
+                structured_comment_key = re.search(pattern, line)
+                if structured_comment_key is not None:
+                    structured_comment_key = structured_comment_key.group(1)
+                    logging.debug("Found Structured Comment")
+                else:
+                    comment_list.append(line)
+            elif (
+                structured_comment_key is not None
+                and self.STRUCTURED_COMMENT_DELIM in line
+            ):
+                pattern = r"(.+?)\s*{0}\s*(.+)".format(self.STRUCTURED_COMMENT_DELIM)
+                match = re.search(pattern, line)
+                structured_comment_dict.setdefault(
+                    structured_comment_key, OrderedDict()
+                )
+                structured_comment_dict[structured_comment_key][
+                    match.group(1)
+                ] = match.group(2)
+                logging.debug("Structured Comment continuation [" + line + "]")
+            elif (
+                structured_comment_key is not None
+                and self.STRUCTURED_COMMENT_END not in line
+            ):
+                previous_value_line = structured_comment_dict[structured_comment_key][
+                    match.group(1)
+                ]
+                structured_comment_dict[structured_comment_key][match.group(1)] = (
+                    previous_value_line + " " + line.strip()
+                )
+            elif self.STRUCTURED_COMMENT_END in line:
+                structured_comment_key = None
+            else:
+                comment_list.append(line)
+                logging.debug("Comment continuation [" + line + "]")
+        if comment_list:
+            consumer.comment(comment_list)
+        if structured_comment_dict:
+            consumer.structured_comment(structured_comment_dict)
+        del comment_list, structured_comment_key, structured_comment_dict
+
+    def _feed_header_organism(self, consumer, data):
+        organism_data = ""
+        lineage_data = ""
+        for line in data:
+            if lineage_data or ";" in line:
+                lineage_data += f" {line}"
+            elif line != ".":
+                organism_data += f" {line}"
+        if organism_data == "":
+            organism_data = "."
+        consumer.organism(organism_data.strip())
+        if lineage_data.strip() == "":
+            logging.debug("Taxonomy line(s) missing or blank")
+        consumer.taxonomy(lineage_data.strip())
+        del organism_data, lineage_data
+
+    def _feed_header_reference(self, consumer, data):
+        logging.debug("Found reference [" + data[0] + "]")
+        for line in data:
+            logging.debug("Extended reference text [" + line + "]")
+        data = " ".join(data)
+        while "  " in data:
+            data = data.replace("  ", " ")
+        if " " not in data:
+            logging.debug('Reference number "' + data + '"')
+            consumer.reference_num(data)
+        else:
+            logging.debug(
+                'Reference number "'
+                + data[: data.find(" ")]
+                + '", "'
+                + data[data.find(" ") + 1 :]
+                + '"'
+            )
+            consumer.reference_num(data[: data.find(" ")])
+            consumer.reference_bases(data[data.find(" ") + 1 :])
+
+    def _feed_header_dblink(self, consumer, data):
+        for line in data:
+            consumer.dblink(line.strip())
+
+    def _feed_header_version(self, consumer, data):
+        while "  " in data:
+            data = data.replace("  ", " ")
+        if " GI:" not in data:
+            consumer.version(data)
+        else:
+            logging.debug(
+                "Version ["
+                + data.split(" GI:")[0]
+                + "], gi ["
+                + data.split(" GI:")[1]
+                + "]"
+            )
+            consumer.version(data.split(" GI:")[0])
+            consumer.gi(data.split(" GI:")[1])
 
     def _feed_misc_lines(self, consumer, lines):
         lines.append("")
