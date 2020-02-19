@@ -353,7 +353,7 @@ class InsdcScanner:
         return [], ""  # Dummy values!
 
     def _feed_first_line(self, consumer, line):
-        """Handle the LOCUS/ID line, passing data to the comsumer (PRIVATE).
+        """Handle the LOCUS/ID line, passing data to the consumer (PRIVATE).
 
         This should be implemented by the EMBL / GenBank specific subclass
 
@@ -362,7 +362,7 @@ class InsdcScanner:
         pass
 
     def _feed_header_lines(self, consumer, lines):
-        """Handle the header lines (list of strings), passing data to the comsumer (PRIVATE).
+        """Handle the header lines (list of strings), passing data to the consumer (PRIVATE).
 
         This should be implemented by the EMBL / GenBank specific subclass
 
@@ -372,7 +372,7 @@ class InsdcScanner:
 
     @staticmethod
     def _feed_feature_table(consumer, feature_tuples):
-        """Handle the feature table (list of tuples), passing data to the comsumer (PRIVATE).
+        """Handle the feature table (list of tuples), passing data to the consumer (PRIVATE).
 
         Used by the parse_records() and parse() methods.
         """
@@ -499,7 +499,7 @@ class InsdcScanner:
 
         Arguments:
          - alphabet - Used for any sequence found in a translation field.
-         - tags2id  - Tupple of three strings, the feature keys to use
+         - tags2id  - Tuple of three strings, the feature keys to use
            for the record id, name and description,
 
         This method is intended for use in Bio.SeqIO
@@ -1080,7 +1080,7 @@ class _ImgtScanner(EmblScanner):
                     or line.rstrip() == ""
                 ):  # cope with blank lines in the midst of a feature
                     # Use strip to remove any harmless trailing white space AND and leading
-                    # white space (copes with 21 or 26 indents and orther variants)
+                    # white space (copes with 21 or 26 indents and other variants)
                     assert line[:2] == "FT"
                     feature_lines.append(line[self.FEATURE_QUALIFIER_INDENT :].strip())
                     line = self.handle.readline()
@@ -1204,6 +1204,14 @@ def _feed_header_comment(consumer, data, comment_start, comment_delim, comment_e
     if structured_comment_dict:
         consumer.structured_comment(structured_comment_dict)
     del comment_list, structured_comment_key, structured_comment_dict
+
+
+def _feed_misc_common(consumer, consumer_dict, key, line):
+    if line.startswith(key):
+        line = line[len(key)].strip()
+        if line:
+            getattr(consumer, consumer_dict[key])(line)
+    return line
 
 
 class GenBankScanner(InsdcScanner):
@@ -1382,7 +1390,6 @@ class GenBankScanner(InsdcScanner):
         self._process_header_data(consumer, working_line_type, data_acc)
 
     def _process_header_data(self, consumer, line_type, data):
-
         if line_type == "VERSION":
             _feed_header_version(consumer, data[0])
         elif line_type == "DBLINK":
@@ -1405,51 +1412,38 @@ class GenBankScanner(InsdcScanner):
             logging.debug("Ignoring GenBank header line:\n" % data)
 
     def _feed_misc_lines(self, consumer, lines):
-        lines.append("")
-        line_iter = iter(lines)
-        try:
-            for line in line_iter:
-                if line.startswith("BASE COUNT"):
-                    line = line[10:].strip()
-                    if line:
-                        logging.debug("base_count = " + line)
-                        consumer.base_count(line)
-                if line.startswith("ORIGIN"):
+        consumer_dict = {
+            "BASE COUNT": "base_count",
+            "ORIGIN": "origin_name",
+            "TLS": "tls",
+            "TSA": "tsa",
+            "WGS": "wgs",
+            "WGS_SCAFLD": "add_wgs_scafld",
+        }
+        contig = False
+        contig_location = ""
+        for line in lines:
+            if contig:
+                if line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
+                    contig_location += line[self.GENBANK_INDENT :].rstrip()
+                elif line.startswith("ORIGIN"):
                     line = line[6:].strip()
                     if line:
-                        logging.debug("origin_name = " + line)
                         consumer.origin_name(line)
-                if line.startswith("TLS "):
-                    line = line[3:].strip()
-                    consumer.tls(line)
-                if line.startswith("TSA "):
-                    line = line[3:].strip()
-                    consumer.tsa(line)
-                if line.startswith("WGS "):
-                    line = line[3:].strip()
-                    consumer.wgs(line)
-                if line.startswith("WGS_SCAFLD"):
-                    line = line[10:].strip()
-                    consumer.add_wgs_scafld(line)
+                else:
+                    raise ValueError("Expected CONTIG continuation line, got:\n" + line)
+            else:
                 if line.startswith("CONTIG"):
                     line = line[6:].strip()
                     contig_location = line
-                    while True:
-                        line = next(line_iter)
-                        if not line:
-                            break
-                        elif line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
-                            contig_location += line[self.GENBANK_INDENT :].rstrip()
-                        elif line.startswith("ORIGIN"):
-                            line = line[6:].strip()
+                    contig = True
+                else:
+                    for key in consumer_dict:
+                        if line.startswith(key):
+                            line = line[len(key) :].strip()
                             if line:
-                                consumer.origin_name(line)
+                                getattr(consumer, consumer_dict[key])(line)
                             break
-                        else:
-                            raise ValueError(
-                                "Expected CONTIG continuation line, got:\n" + line
-                            )
-                    consumer.contig_location(contig_location)
-            return
-        except StopIteration:
-            raise ValueError("Problem in misc lines before sequence") from None
+        if contig_location:
+            consumer.contig_location(contig_location)
+        return
