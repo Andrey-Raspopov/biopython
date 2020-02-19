@@ -29,15 +29,13 @@ http://imgt.cines.fr/download/LIGM-DB/ftable_doc.html
 http://www.ebi.ac.uk/imgt/hla/docs/manual.html
 
 """
-
-
+import logging
 import warnings
-from datetime import datetime
-from Bio import BiopythonWarning
+from Bio import BiopythonWarning, BiopythonParserWarning
+from Bio.Alphabet import generic_protein
+from Bio.File import as_handle
+from Bio.Seq import Seq
 
-from Bio.Seq import UnknownSeq
-from Bio.GenBank.Scanner import GenBankScanner, EmblScanner, _ImgtScanner
-from Bio import Alphabet
 from Bio.SeqIO.Interfaces import SequentialSequenceWriter
 from Bio import SeqFeature
 
@@ -47,190 +45,7 @@ from Bio import SeqFeature
 # other flat file variants from the INSDC in future) is in
 # Bio.GenBank.Scanner (plus the _FeatureConsumer in Bio.GenBank)
 # However, all the writing code is in this file.
-
-
-def GenBankIterator(source):
-    """Break up a Genbank file into SeqRecord objects.
-
-    Argument source is a file-like object opened in text mode or a path to a file.
-
-    Every section from the LOCUS line to the terminating // becomes
-    a single SeqRecord with associated annotation and features.
-
-    Note that for genomes or chromosomes, there is typically only
-    one record.
-
-    This gets called internally by Bio.SeqIO for the GenBank file format:
-
-    >>> from Bio import SeqIO
-    >>> for record in SeqIO.parse("GenBank/cor6_6.gb", "gb"):
-    ...     print(record.id)
-    ...
-    X55053.1
-    X62281.1
-    M81224.1
-    AJ237582.1
-    L31939.1
-    AF297471.1
-
-    Equivalently,
-
-    >>> with open("GenBank/cor6_6.gb") as handle:
-    ...     for record in GenBankIterator(handle):
-    ...         print(record.id)
-    ...
-    X55053.1
-    X62281.1
-    M81224.1
-    AJ237582.1
-    L31939.1
-    AF297471.1
-
-    """
-    try:
-        handle = open(source)
-    except TypeError:
-        handle = source
-        if handle.read(0) != "":
-            raise ValueError("GenBank files must be opened in text mode.") from None
-
-    try:
-        records = GenBankScanner().parse_records(handle)
-        yield from records
-    finally:
-        if handle is not source:
-            handle.close()
-
-
-def EmblIterator(source):
-    """Break up an EMBL file into SeqRecord objects.
-
-    Argument source is a file-like object opened in text mode or a path to a file.
-    Every section from the LOCUS line to the terminating // becomes
-    a single SeqRecord with associated annotation and features.
-
-    Note that for genomes or chromosomes, there is typically only
-    one record.
-
-    This gets called internally by Bio.SeqIO for the EMBL file format:
-
-    >>> from Bio import SeqIO
-    >>> for record in SeqIO.parse("EMBL/epo_prt_selection.embl", "embl"):
-    ...     print(record.id)
-    ...
-    A00022.1
-    A00028.1
-    A00031.1
-    A00034.1
-    A00060.1
-    A00071.1
-    A00072.1
-    A00078.1
-    CQ797900.1
-
-    Equivalently,
-
-    >>> with open("EMBL/epo_prt_selection.embl") as handle:
-    ...     for record in EmblIterator(handle):
-    ...         print(record.id)
-    ...
-    A00022.1
-    A00028.1
-    A00031.1
-    A00034.1
-    A00060.1
-    A00071.1
-    A00072.1
-    A00078.1
-    CQ797900.1
-
-    """
-    try:
-        handle = open(source)
-    except TypeError:
-        handle = source
-        if handle.read(0) != "":
-            raise ValueError("EMBL files must be opened in text mode.") from None
-
-    try:
-        records = EmblScanner().parse_records(handle)
-        yield from records
-    finally:
-        if handle is not source:
-            handle.close()
-
-
-def ImgtIterator(source):
-    """Break up an IMGT file into SeqRecord objects.
-
-    Argument source is a file-like object opened in text mode or a path to a file.
-    Every section from the LOCUS line to the terminating // becomes
-    a single SeqRecord with associated annotation and features.
-
-    Note that for genomes or chromosomes, there is typically only
-    one record.
-    """
-    try:
-        handle = open(source)
-    except TypeError:
-        handle = source
-        if handle.read(0) != "":
-            raise ValueError("IMGT files must be opened in text mode.") from None
-
-    try:
-        records = _ImgtScanner().parse_records(handle)
-        yield from records
-    finally:
-        if handle is not source:
-            handle.close()
-
-
-def GenBankCdsFeatureIterator(source, alphabet=Alphabet.generic_protein):
-    """Break up a Genbank file into SeqRecord objects for each CDS feature.
-
-    Argument source is a file-like object opened in text mode or a path to a file.
-
-    Every section from the LOCUS line to the terminating // can contain
-    many CDS features.  These are returned as with the stated amino acid
-    translation sequence (if given).
-    """
-    try:
-        handle = open(source)
-    except TypeError:
-        handle = source
-        if handle.read(0) != "":
-            raise ValueError("GenBank files must be opened in text mode.") from None
-
-    try:
-        records = GenBankScanner().parse_cds_features(handle, alphabet)
-        yield from records
-    finally:
-        if handle is not source:
-            handle.close()
-
-
-def EmblCdsFeatureIterator(source, alphabet=Alphabet.generic_protein):
-    """Break up a EMBL file into SeqRecord objects for each CDS feature.
-
-    Argument source is a file-like object opened in text mode or a path to a file.
-
-    Every section from the LOCUS line to the terminating // can contain
-    many CDS features.  These are returned as with the stated amino acid
-    translation sequence (if given).
-    """
-    try:
-        handle = open(source)
-    except TypeError:
-        handle = source
-        if handle.read(0) != "":
-            raise ValueError("EMBL files must be opened in text mode.") from None
-
-    try:
-        records = EmblScanner().parse_cds_features(handle, alphabet)
-        yield from records
-    finally:
-        if handle is not source:
-            handle.close()
+from Bio.SeqRecord import SeqRecord
 
 
 def _insdc_feature_position_string(pos, offset=0):
@@ -543,977 +358,550 @@ class _InsdcWriter(SequentialSequenceWriter):
         return answer
 
 
-class GenBankWriter(_InsdcWriter):
-    """GenBank writer."""
-
-    HEADER_WIDTH = 12
-    QUALIFIER_INDENT = 21
-    STRUCTURED_COMMENT_START = "-START##"
-    STRUCTURED_COMMENT_END = "-END##"
-    STRUCTURED_COMMENT_DELIM = " :: "
-    LETTERS_PER_LINE = 60
-    SEQUENCE_INDENT = 9
-
-    def _write_single_line(self, tag, text):
-        """Write single line in each GenBank record (PRIVATE).
-
-        Used in the 'header' of each GenBank record.
-        """
-        assert len(tag) < self.HEADER_WIDTH
-        if len(text) > self.MAX_WIDTH - self.HEADER_WIDTH:
-            if tag:
-                warnings.warn(
-                    "Annotation %r too long for %r line" % (text, tag), BiopythonWarning
-                )
-            else:
-                # Can't give such a precise warning
-                warnings.warn("Annotation %r too long" % text, BiopythonWarning)
-        self.handle.write(
-            "%s%s\n" % (tag.ljust(self.HEADER_WIDTH), text.replace("\n", " "))
-        )
-
-    def _write_multi_line(self, tag, text):
-        """Write multiple lines in each GenBank record (PRIVATE).
-
-        Used in the 'header' of each GenBank record.
-        """
-        # TODO - Do the line spliting while preserving white space?
-        max_len = self.MAX_WIDTH - self.HEADER_WIDTH
-        lines = self._split_multi_line(text, max_len)
-        self._write_single_line(tag, lines[0])
-        for line in lines[1:]:
-            self._write_single_line("", line)
-
-    def _write_multi_entries(self, tag, text_list):
-        # used for DBLINK and any similar later line types.
-        # If the list of strings is empty, nothing is written.
-        for i, text in enumerate(text_list):
-            if i == 0:
-                self._write_single_line(tag, text)
-            else:
-                self._write_single_line("", text)
-
-    @staticmethod
-    def _get_date(record):
-        default = "01-JAN-1980"
-        try:
-            date = record.annotations["date"]
-        except KeyError:
-            return default
-        # Cope with a list of one string:
-        if isinstance(date, list) and len(date) == 1:
-            date = date[0]
-        if isinstance(date, datetime):
-            date = date.strftime("%d-%b-%Y").upper()
-
-        months = [
-            "JAN",
-            "FEB",
-            "MAR",
-            "APR",
-            "MAY",
-            "JUN",
-            "JUL",
-            "AUG",
-            "SEP",
-            "OCT",
-            "NOV",
-            "DEC",
-        ]
-        if not isinstance(date, str) or len(date) != 11:
-            return default
-        try:
-            datetime(int(date[-4:]), months.index(date[3:6]) + 1, int(date[0:2]))
-        except ValueError:
-            date = default
-        return date
-
-    @staticmethod
-    def _get_data_division(record):
-        try:
-            division = record.annotations["data_file_division"]
-        except KeyError:
-            division = "UNK"
-        if division in [
-            "PRI",
-            "ROD",
-            "MAM",
-            "VRT",
-            "INV",
-            "PLN",
-            "BCT",
-            "VRL",
-            "PHG",
-            "SYN",
-            "UNA",
-            "EST",
-            "PAT",
-            "STS",
-            "GSS",
-            "HTG",
-            "HTC",
-            "ENV",
-            "CON",
-            "TSA",
-        ]:
-            # Good, already GenBank style
-            #    PRI - primate sequences
-            #    ROD - rodent sequences
-            #    MAM - other mammalian sequences
-            #    VRT - other vertebrate sequences
-            #    INV - invertebrate sequences
-            #    PLN - plant, fungal, and algal sequences
-            #    BCT - bacterial sequences [plus archea]
-            #    VRL - viral sequences
-            #    PHG - bacteriophage sequences
-            #    SYN - synthetic sequences
-            #    UNA - unannotated sequences
-            #    EST - EST sequences (expressed sequence tags)
-            #    PAT - patent sequences
-            #    STS - STS sequences (sequence tagged sites)
-            #    GSS - GSS sequences (genome survey sequences)
-            #    HTG - HTGS sequences (high throughput genomic sequences)
-            #    HTC - HTC sequences (high throughput cDNA sequences)
-            #    ENV - Environmental sampling sequences
-            #    CON - Constructed sequences
-            #    TSA - Transcriptome Shotgun Assembly
-            #
-            # (plus UNK for unknown)
-            pass
-        else:
-            # See if this is in EMBL style:
-            #    Division                 Code
-            #    -----------------        ----
-            #    Bacteriophage            PHG - common
-            #    Environmental Sample     ENV - common
-            #    Fungal                   FUN - map to PLN (plants + fungal)
-            #    Human                    HUM - map to PRI (primates)
-            #    Invertebrate             INV - common
-            #    Other Mammal             MAM - common
-            #    Other Vertebrate         VRT - common
-            #    Mus musculus             MUS - map to ROD (rodent)
-            #    Plant                    PLN - common
-            #    Prokaryote               PRO - map to BCT (poor name)
-            #    Other Rodent             ROD - common
-            #    Synthetic                SYN - common
-            #    Transgenic               TGN - ??? map to SYN ???
-            #    Unclassified             UNC - map to UNK
-            #    Viral                    VRL - common
-            #
-            # (plus XXX for submiting which we can map to UNK)
-            embl_to_gbk = {
-                "FUN": "PLN",
-                "HUM": "PRI",
-                "MUS": "ROD",
-                "PRO": "BCT",
-                "UNC": "UNK",
-                "XXX": "UNK",
-            }
-            try:
-                division = embl_to_gbk[division]
-            except KeyError:
-                division = "UNK"
-        assert len(division) == 3
-        return division
-
-    def _get_topology(self, record):
-        """Set the topology to 'circular', 'linear' if defined (PRIVATE)."""
-        max_topology_len = len("circular")
-
-        topology = self._get_annotation_str(record, "topology", default="")
-        if topology and len(topology) <= max_topology_len:
-            return topology.ljust(max_topology_len)
-        else:
-            return " " * max_topology_len
-
-    def _write_the_first_line(self, record):
-        """Write the LOCUS line (PRIVATE)."""
-        locus = record.name
-        if not locus or locus == "<unknown name>":
-            locus = record.id
-        if not locus or locus == "<unknown id>":
-            locus = self._get_annotation_str(record, "accession", just_first=True)
-        if len(locus) > 16:
-            if len(locus) + 1 + len(str(len(record))) > 28:
-                # Locus name and record length to long to squeeze in.
-                # Per updated GenBank standard (Dec 15, 2018) 229.0
-                # the Locus identifier can be any length, and a space
-                # is added after the identifier to keep the identifier
-                # and length fields separated
-                warnings.warn(
-                    "Increasing length of locus line to allow "
-                    "long name. This will result in fields that "
-                    "are not in usual positions.",
-                    BiopythonWarning,
-                )
-
-        if len(locus.split()) > 1:
-            raise ValueError("Invalid whitespace in %r for LOCUS line" % locus)
-        if len(record) > 99999999999:
-            # As of the GenBank release notes 229.0, the locus line can be
-            # any length. However, long locus lines may not be compatible
-            # with all software.
-            warnings.warn(
-                "The sequence length is very long. The LOCUS "
-                "line will be increased in length to compensate. "
-                "This may cause unexpected behavior.",
-                BiopythonWarning,
-            )
-
-        # Get the base alphabet (underneath any Gapped or StopCodon encoding)
-        a = Alphabet._get_base_alphabet(record.seq.alphabet)
-        if not isinstance(a, Alphabet.Alphabet):
-            raise TypeError("Invalid alphabet")
-        elif isinstance(a, Alphabet.ProteinAlphabet):
-            units = "aa"
-        elif isinstance(a, Alphabet.NucleotideAlphabet):
-            units = "bp"
-        else:
-            # Must be something like NucleotideAlphabet or
-            # just the generic Alphabet (default for fasta files)
-            raise ValueError("Need a Nucleotide or Protein alphabet")
-
-        # Get the molecule type
-        mol_type = self._get_annotation_str(record, "molecule_type", default=None)
-        if mol_type and len(mol_type) > 7:
-            # Deal with common cases from EMBL to GenBank
-            mol_type = mol_type.replace("unassigned ", "").replace("genomic ", "")
-            if len(mol_type) > 7:
-                warnings.warn("Molecule type %r too long" % mol_type, BiopythonWarning)
-                mol_type = None
-        if mol_type in ["protein", "PROTEIN"]:
-            mol_type = ""
-
-        if mol_type:
-            pass
-        elif isinstance(a, Alphabet.ProteinAlphabet):
-            mol_type = ""
-        elif isinstance(a, Alphabet.DNAAlphabet):
-            mol_type = "DNA"
-        elif isinstance(a, Alphabet.RNAAlphabet):
-            mol_type = "RNA"
-        else:
-            # Must be something like NucleotideAlphabet or
-            # just the generic Alphabet (default for fasta files)
-            raise ValueError("Need a DNA, RNA or Protein alphabet")
-
-        topology = self._get_topology(record)
-
-        division = self._get_data_division(record)
-
-        # Accommodate longer header, with long accessions and lengths
-        if len(locus) > 16 and len(str(len(record))) > (11 - (len(locus) - 16)):
-            name_length = locus + " " + str(len(record))
-
-        # This is the older, standard 80 position header
-        else:
-            name_length = str(len(record)).rjust(28)
-            name_length = locus + name_length[len(locus) :]
-            assert len(name_length) == 28, name_length
-            assert " " in name_length, name_length
-
-        assert len(units) == 2
-        assert len(division) == 3
-        line = "LOCUS       %s %s    %s %s %s %s\n" % (
-            name_length,
-            units,
-            mol_type.ljust(7),
-            topology,
-            division,
-            self._get_date(record),
-        )
-        # Extra long header
-        if len(line) > 80:
-            splitline = line.split()
-            if splitline[3] not in ["bp", "aa"]:
-                raise ValueError(
-                    "LOCUS line does not contain size units at "
-                    "expected position:\n" + line
-                )
-
-            if not (
-                splitline[4].strip() == ""
-                or "DNA" in splitline[4].strip().upper()
-                or "RNA" in splitline[4].strip().upper()
-            ):
-                raise ValueError(
-                    "LOCUS line does not contain valid "
-                    "sequence type (DNA, RNA, ...):\n" + line
-                )
-
-            self.handle.write(line)
-
-        # 80 position header
-        else:
-            assert len(line) == 79 + 1, repr(line)  # plus one for new line
-
-            # We're bending the rules to allow an identifier over 16 characters
-            # if we can steal spaces from the length field:
-            # assert line[12:28].rstrip() == locus, \
-            #     'LOCUS line does not contain the locus at the expected position:\n' + line
-            # assert line[28:29] == " "
-            # assert line[29:40].lstrip() == str(len(record)), \
-            #     'LOCUS line does not contain the length at the expected position:\n' + line
-            assert line[12:40].split() == [locus, str(len(record))], line
-
-            # Tests copied from Bio.GenBank.Scanner
-            if line[40:44] not in [" bp ", " aa "]:
-                raise ValueError(
-                    "LOCUS line does not contain size units at "
-                    "expected position:\n" + line
-                )
-            if line[44:47] not in ["   ", "ss-", "ds-", "ms-"]:
-                raise ValueError(
-                    "LOCUS line does not have valid strand "
-                    "type (Single stranded, ...):\n" + line
-                )
-            if not (
-                line[47:54].strip() == ""
-                or "DNA" in line[47:54].strip().upper()
-                or "RNA" in line[47:54].strip().upper()
-            ):
-                raise ValueError(
-                    "LOCUS line does not contain valid "
-                    "sequence type (DNA, RNA, ...):\n" + line
-                )
-            if line[54:55] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 55:\n" + line
-                )
-            if line[55:63].strip() not in ["", "linear", "circular"]:
-                raise ValueError(
-                    "LOCUS line does not contain valid "
-                    "entry (linear, circular, ...):\n" + line
-                )
-            if line[63:64] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 64:\n" + line
-                )
-            if line[67:68] != " ":
-                raise ValueError(
-                    "LOCUS line does not contain space at position 68:\n" + line
-                )
-            if line[70:71] != "-":
-                raise ValueError(
-                    "LOCUS line does not contain - at position 71 in date:\n" + line
-                )
-            if line[74:75] != "-":
-                raise ValueError(
-                    "LOCUS line does not contain - at position 75 in date:\n" + line
-                )
-
-            self.handle.write(line)
-
-    def _write_references(self, record):
-        number = 0
-        for ref in record.annotations["references"]:
-            if not isinstance(ref, SeqFeature.Reference):
-                continue
-            number += 1
-            data = str(number)
-            # TODO - support more complex record reference locations?
-            if ref.location and len(ref.location) == 1:
-                a = Alphabet._get_base_alphabet(record.seq.alphabet)
-                if isinstance(a, Alphabet.ProteinAlphabet):
-                    units = "residues"
-                else:
-                    units = "bases"
-                data += "  (%s %i to %i)" % (
-                    units,
-                    ref.location[0].nofuzzy_start + 1,
-                    ref.location[0].nofuzzy_end,
-                )
-            self._write_single_line("REFERENCE", data)
-            if ref.authors:
-                # We store the AUTHORS data as a single string
-                self._write_multi_line("  AUTHORS", ref.authors)
-            if ref.consrtm:
-                # We store the consortium as a single string
-                self._write_multi_line("  CONSRTM", ref.consrtm)
-            if ref.title:
-                # We store the title as a single string
-                self._write_multi_line("  TITLE", ref.title)
-            if ref.journal:
-                # We store this as a single string - holds the journal name,
-                # volume, year, and page numbers of the citation
-                self._write_multi_line("  JOURNAL", ref.journal)
-            if ref.medline_id:
-                # This line type is obsolete and was removed from the GenBank
-                # flatfile format in April 2005. Should we write it?
-                # Note this has a two space indent:
-                self._write_multi_line("  MEDLINE", ref.medline_id)
-            if ref.pubmed_id:
-                # Note this has a THREE space indent:
-                self._write_multi_line("   PUBMED", ref.pubmed_id)
-            if ref.comment:
-                self._write_multi_line("  REMARK", ref.comment)
-
-    def _write_comment(self, record):
-        # This is a bit complicated due to the range of possible
-        # ways people might have done their annotation...
-        # Currently the parser uses a single string with newlines.
-        # A list of lines is also reasonable.
-        # A single (long) string is perhaps the most natural of all.
-        # This means we may need to deal with line wrapping.
-        lines = []
-        if "structured_comment" in record.annotations:
-            comment = record.annotations["structured_comment"]
-            # Find max length of keys for equal padded printing
-            padding = 0
-            for key, data in comment.items():
-                for subkey, subdata in data.items():
-                    padding = len(subkey) if len(subkey) > padding else padding
-            # Construct output
-            for key, data in comment.items():
-                lines.append(f"##{key}{self.STRUCTURED_COMMENT_START}")
-                for subkey, subdata in data.items():
-                    spaces = " " * (padding - len(subkey))
-                    lines.append(
-                        f"{subkey}{spaces}{self.STRUCTURED_COMMENT_DELIM}{subdata}"
-                    )
-                lines.append(f"##{key}{self.STRUCTURED_COMMENT_END}")
-        if "comment" in record.annotations:
-            comment = record.annotations["comment"]
-            if isinstance(comment, str):
-                lines += comment.split("\n")
-            elif isinstance(comment, (list, tuple)):
-                lines += list(comment)
-            else:
-                raise ValueError("Could not understand comment annotation")
-        self._write_multi_line("COMMENT", lines[0])
-        for line in lines[1:]:
-            self._write_multi_line("", line)
-
-    def _write_contig(self, record):
-        max_len = self.MAX_WIDTH - self.HEADER_WIDTH
-        lines = self._split_contig(record, max_len)
-        self._write_single_line("CONTIG", lines[0])
-        for text in lines[1:]:
-            self._write_single_line("", text)
-
-    def _write_sequence(self, record):
-        # Loosely based on code from Howard Salis
-        # TODO - Force lower case?
-
-        if isinstance(record.seq, UnknownSeq):
-            # We have already recorded the length, and there is no need
-            # to record a long sequence of NNNNNNN...NNN or whatever.
-            if "contig" in record.annotations:
-                self._write_contig(record)
-            else:
-                self.handle.write("ORIGIN\n")
-            return
-
-        # Catches sequence being None:
-        data = self._get_seq_string(record).lower()
-        seq_len = len(data)
-        self.handle.write("ORIGIN\n")
-        for line_number in range(0, seq_len, self.LETTERS_PER_LINE):
-            self.handle.write(str(line_number + 1).rjust(self.SEQUENCE_INDENT))
-            for words in range(
-                line_number, min(line_number + self.LETTERS_PER_LINE, seq_len), 10
-            ):
-                self.handle.write(" %s" % data[words : words + 10])
-            self.handle.write("\n")
-
-    def write_record(self, record):
-        """Write a single record to the output file."""
-        handle = self.handle
-        self._write_the_first_line(record)
-
-        default = record.id
-        if default.count(".") == 1 and default[default.index(".") + 1 :].isdigit():
-            # Good, looks like accesion.version and not something
-            # else like identifier.start-end
-            default = record.id.split(".", 1)[0]
-        accession = self._get_annotation_str(
-            record, "accession", default, just_first=True
-        )
-        acc_with_version = accession
-        if record.id.startswith(accession + "."):
-            try:
-                acc_with_version = "%s.%i" % (
-                    accession,
-                    int(record.id.split(".", 1)[1]),
-                )
-            except ValueError:
-                pass
-        gi = self._get_annotation_str(record, "gi", just_first=True)
-
-        descr = record.description
-        if descr == "<unknown description>":
-            descr = ""  # Trailing dot will be added later
-
-        # The DEFINITION field must end with a period
-        # see ftp://ftp.ncbi.nih.gov/genbank/gbrel.txt [3.4.5]
-        # and discussion https://github.com/biopython/biopython/pull/616
-        # So let's add a period
-        descr += "."
-        self._write_multi_line("DEFINITION", descr)
-
-        self._write_single_line("ACCESSION", accession)
-        if gi != ".":
-            self._write_single_line("VERSION", "%s  GI:%s" % (acc_with_version, gi))
-        else:
-            self._write_single_line("VERSION", "%s" % acc_with_version)
-
-        # The NCBI initially expected two types of link,
-        # e.g. "Project:28471" and "Trace Assembly Archive:123456"
-        #
-        # This changed and at some point the formatting switched to
-        # include a space after the colon, e.g.
-        #
-        # LOCUS       NC_000011               1606 bp    DNA     linear   CON 06-JUN-2016
-        # DEFINITION  Homo sapiens chromosome 11, GRCh38.p7 Primary Assembly.
-        # ACCESSION   NC_000011 REGION: complement(5225466..5227071) GPC_000001303
-        # VERSION     NC_000011.10  GI:568815587
-        # DBLINK      BioProject: PRJNA168
-        #             Assembly: GCF_000001405.33
-        # ...
-        #
-        # Or,
-        #
-        # LOCUS       JU120277                1044 bp    mRNA    linear   TSA 27-NOV-2012
-        # DEFINITION  TSA: Tupaia chinensis tbc000002.Tuchadli mRNA sequence.
-        # ACCESSION   JU120277
-        # VERSION     JU120277.1  GI:379775257
-        # DBLINK      BioProject: PRJNA87013
-        #             Sequence Read Archive: SRR433859
-        # ...
-        dbxrefs_with_space = []
-        for x in record.dbxrefs:
-            if ": " not in x:
-                x = x.replace(":", ": ")
-            dbxrefs_with_space.append(x)
-        self._write_multi_entries("DBLINK", dbxrefs_with_space)
-        del dbxrefs_with_space
-
-        try:
-            # List of strings
-            # Keywords should be given separated with semi colons,
-            keywords = "; ".join(record.annotations["keywords"])
-            # with a trailing period:
-            if not keywords.endswith("."):
-                keywords += "."
-        except KeyError:
-            # If no keywords, there should be just a period:
-            keywords = "."
-        self._write_multi_line("KEYWORDS", keywords)
-
-        if "segment" in record.annotations:
-            # Deal with SEGMENT line found only in segmented records,
-            # e.g. AH000819
-            segment = record.annotations["segment"]
-            if isinstance(segment, list):
-                assert len(segment) == 1, segment
-                segment = segment[0]
-            self._write_single_line("SEGMENT", segment)
-
-        self._write_multi_line("SOURCE", self._get_annotation_str(record, "source"))
-        # The ORGANISM line MUST be a single line, as any continuation is the taxonomy
-        org = self._get_annotation_str(record, "organism")
-        if len(org) > self.MAX_WIDTH - self.HEADER_WIDTH:
-            org = org[: self.MAX_WIDTH - self.HEADER_WIDTH - 4] + "..."
-        self._write_single_line("  ORGANISM", org)
-        try:
-            # List of strings
-            # Taxonomy should be given separated with semi colons,
-            taxonomy = "; ".join(record.annotations["taxonomy"])
-            # with a trailing period:
-            if not taxonomy.endswith("."):
-                taxonomy += "."
-        except KeyError:
-            taxonomy = "."
-        self._write_multi_line("", taxonomy)
-
-        if "references" in record.annotations:
-            self._write_references(record)
-
-        if (
-            "comment" in record.annotations
-            or "structured_comment" in record.annotations
-        ):
-            self._write_comment(record)
-
-        handle.write("FEATURES             Location/Qualifiers\n")
-        rec_length = len(record)
-        for feature in record.features:
-            self._write_feature(feature, rec_length)
-        self._write_sequence(record)
-        handle.write("//\n")
-
-
-class EmblWriter(_InsdcWriter):
-    """EMBL writer."""
-
-    HEADER_WIDTH = 5
-    QUALIFIER_INDENT = 21
-    QUALIFIER_INDENT_STR = "FT" + " " * (QUALIFIER_INDENT - 2)
-    QUALIFIER_INDENT_TMP = "FT   %s                "  # 21 if %s is empty
-    # Note second spacer line of just FH is expected:
-    FEATURE_HEADER = "FH   Key             Location/Qualifiers\nFH\n"
-
-    LETTERS_PER_BLOCK = 10
-    BLOCKS_PER_LINE = 6
-    LETTERS_PER_LINE = LETTERS_PER_BLOCK * BLOCKS_PER_LINE
-    POSITION_PADDING = 10
-
-    def _write_contig(self, record):
-        max_len = self.MAX_WIDTH - self.HEADER_WIDTH
-        lines = self._split_contig(record, max_len)
-        for text in lines:
-            self._write_single_line("CO", text)
-
-    def _write_sequence(self, record):
-        handle = self.handle  # save looking up this multiple times
-
-        if isinstance(record.seq, UnknownSeq):
-            # We have already recorded the length, and there is no need
-            # to record a long sequence of NNNNNNN...NNN or whatever.
-            if "contig" in record.annotations:
-                self._write_contig(record)
-            else:
-                # TODO - Can the sequence just be left out as in GenBank files?
-                handle.write("SQ   \n")
-            return
-
-        # Catches sequence being None
-        data = self._get_seq_string(record).lower()
-        seq_len = len(data)
-
-        # Get the base alphabet (underneath any Gapped or StopCodon encoding)
-        a = Alphabet._get_base_alphabet(record.seq.alphabet)
-        if isinstance(a, Alphabet.DNAAlphabet):
-            # TODO - What if we have RNA?
-            a_count = data.count("A") + data.count("a")
-            c_count = data.count("C") + data.count("c")
-            g_count = data.count("G") + data.count("g")
-            t_count = data.count("T") + data.count("t")
-            other = seq_len - (a_count + c_count + g_count + t_count)
-            handle.write(
-                "SQ   Sequence %i BP; %i A; %i C; %i G; %i T; %i other;\n"
-                % (seq_len, a_count, c_count, g_count, t_count, other)
-            )
-        else:
-            handle.write("SQ   \n")
-
-        for line_number in range(0, seq_len // self.LETTERS_PER_LINE):
-            handle.write("    ")  # Just four, not five
-            for block in range(self.BLOCKS_PER_LINE):
-                index = (
-                    self.LETTERS_PER_LINE * line_number + self.LETTERS_PER_BLOCK * block
-                )
-                handle.write(" %s" % data[index : index + self.LETTERS_PER_BLOCK])
-            handle.write(
-                str((line_number + 1) * self.LETTERS_PER_LINE).rjust(
-                    self.POSITION_PADDING
-                )
-            )
-            handle.write("\n")
-        if seq_len % self.LETTERS_PER_LINE:
-            # Final (partial) line
-            line_number = seq_len // self.LETTERS_PER_LINE
-            handle.write("    ")  # Just four, not five
-            for block in range(self.BLOCKS_PER_LINE):
-                index = (
-                    self.LETTERS_PER_LINE * line_number + self.LETTERS_PER_BLOCK * block
-                )
-                handle.write(
-                    (" %s" % data[index : index + self.LETTERS_PER_BLOCK]).ljust(11)
-                )
-            handle.write(str(seq_len).rjust(self.POSITION_PADDING))
-            handle.write("\n")
-
-    def _write_single_line(self, tag, text):
-        assert len(tag) == 2
-        line = tag + "   " + text
-        if len(text) > self.MAX_WIDTH:
-            warnings.warn("Line %r too long" % line, BiopythonWarning)
-        self.handle.write(line + "\n")
-
-    def _write_multi_line(self, tag, text):
-        max_len = self.MAX_WIDTH - self.HEADER_WIDTH
-        lines = self._split_multi_line(text, max_len)
-        for line in lines:
-            self._write_single_line(tag, line)
-
-    def _write_the_first_lines(self, record):
-        """Write the ID and AC lines (PRIVATE)."""
-        if "." in record.id and record.id.rsplit(".", 1)[1].isdigit():
-            version = "SV " + record.id.rsplit(".", 1)[1]
-            accession = self._get_annotation_str(
-                record, "accession", record.id.rsplit(".", 1)[0], just_first=True
-            )
-        else:
-            version = ""
-            accession = self._get_annotation_str(
-                record, "accession", record.id, just_first=True
-            )
-
-        if ";" in accession:
-            raise ValueError(
-                "Cannot have semi-colon in EMBL accession, %s" % repr(str(accession))
-            )
-        if " " in accession:
-            # This is out of practicallity... might it be allowed?
-            raise ValueError(
-                "Cannot have spaces in EMBL accession, %s" % repr(str(accession))
-            )
-
-        topology = self._get_annotation_str(record, "topology", default="")
-
-        # Get the molecule type
-        # TODO - record this explicitly in the parser?
-        # Get the base alphabet (underneath any Gapped or StopCodon encoding)
-        a = Alphabet._get_base_alphabet(record.seq.alphabet)
-        if not isinstance(a, Alphabet.Alphabet):
-            raise TypeError("Invalid alphabet")
-        elif isinstance(a, Alphabet.DNAAlphabet):
-            mol_type = "DNA"
-            units = "BP"
-        elif isinstance(a, Alphabet.RNAAlphabet):
-            mol_type = "RNA"
-            units = "BP"
-        elif isinstance(a, Alphabet.ProteinAlphabet):
-            mol_type = "PROTEIN"
-            units = "AA"
-        else:
-            # Must be something like NucleotideAlphabet
-            raise ValueError("Need a DNA, RNA or Protein alphabet")
-
-        if record.annotations.get("molecule_type", None):
-            # Note often get RNA vs DNA discrepancy in real EMBL/NCBI files
-            mol_type = record.annotations["molecule_type"]
-            if mol_type in ["protein"]:
-                mol_type = "PROTEIN"
-
-        # Get the taxonomy division
-        division = self._get_data_division(record)
-
-        # TODO - Full ID line
-        handle = self.handle
-        # ID   <1>; SV <2>; <3>; <4>; <5>; <6>; <7> BP.
-        # 1. Primary accession number
-        # 2. Sequence version number
-        # 3. Topology: 'circular' or 'linear'
-        # 4. Molecule type
-        # 5. Data class
-        # 6. Taxonomic division
-        # 7. Sequence length
-        self._write_single_line(
-            "ID",
-            "%s; %s; %s; %s; ; %s; %i %s."
-            % (accession, version, topology, mol_type, division, len(record), units),
-        )
-        handle.write("XX\n")
-        self._write_single_line("AC", accession + ";")
-        handle.write("XX\n")
-
-    @staticmethod
-    def _get_data_division(record):
-        try:
-            division = record.annotations["data_file_division"]
-        except KeyError:
-            division = "UNC"
-        if division in [
-            "PHG",
-            "ENV",
-            "FUN",
-            "HUM",
-            "INV",
-            "MAM",
-            "VRT",
-            "MUS",
-            "PLN",
-            "PRO",
-            "ROD",
-            "SYN",
-            "TGN",
-            "UNC",
-            "VRL",
-            "XXX",
-        ]:
-            # Good, already EMBL style
-            #    Division                 Code
-            #    -----------------        ----
-            #    Bacteriophage            PHG
-            #    Environmental Sample     ENV
-            #    Fungal                   FUN
-            #    Human                    HUM
-            #    Invertebrate             INV
-            #    Other Mammal             MAM
-            #    Other Vertebrate         VRT
-            #    Mus musculus             MUS
-            #    Plant                    PLN
-            #    Prokaryote               PRO
-            #    Other Rodent             ROD
-            #    Synthetic                SYN
-            #    Transgenic               TGN
-            #    Unclassified             UNC (i.e. unknown)
-            #    Viral                    VRL
-            #
-            # (plus XXX used for submiting data to EMBL)
-            pass
-        else:
-            # See if this is in GenBank style & can be converted.
-            # Generally a problem as the GenBank groups are wider
-            # than those of EMBL. Note that GenBank use "BCT" for
-            # both bacteria and acherea thus this maps to EMBL's
-            # "PRO" nicely.
-            gbk_to_embl = {"BCT": "PRO", "UNK": "UNC"}
-            try:
-                division = gbk_to_embl[division]
-            except KeyError:
-                division = "UNC"
-        assert len(division) == 3
-        return division
-
-    def _write_keywords(self, record):
-        # Put the keywords right after DE line.
-        # Each 'keyword' can have multiple words and spaces, but we
-        # must not split any 'keyword' between lines.
-        # TODO - Combine short keywords onto one line
-        for keyword in record.annotations["keywords"]:
-            self._write_single_line("KW", keyword)
-        self.handle.write("XX\n")
-
-    def _write_references(self, record):
-        # The order should be RN, RC, RP, RX, RG, RA, RT, RL
-        number = 0
-        for ref in record.annotations["references"]:
-            if not isinstance(ref, SeqFeature.Reference):
-                continue
-            number += 1
-            self._write_single_line("RN", "[%i]" % number)
-            # TODO - support for RC line (needed in parser too)
-            # TODO - support more complex record reference locations?
-            if ref.location and len(ref.location) == 1:
-                self._write_single_line(
-                    "RP",
-                    "%i-%i"
-                    % (ref.location[0].nofuzzy_start + 1, ref.location[0].nofuzzy_end),
-                )
-            # TODO - record any DOI or AGRICOLA identifier in the reference object?
-            if ref.pubmed_id:
-                self._write_single_line("RX", "PUBMED; %s." % ref.pubmed_id)
-            if ref.consrtm:
-                self._write_single_line("RG", "%s" % ref.consrtm)
-            if ref.authors:
-                # We store the AUTHORS data as a single string
-                self._write_multi_line("RA", ref.authors + ";")
-            if ref.title:
-                # We store the title as a single string
-                self._write_multi_line("RT", '"%s";' % ref.title)
-            if ref.journal:
-                # We store this as a single string - holds the journal name,
-                # volume, year, and page numbers of the citation
-                self._write_multi_line("RL", ref.journal)
-            self.handle.write("XX\n")
-
-    def _write_comment(self, record):
-        # This is a bit complicated due to the range of possible
-        # ways people might have done their annotation...
-        # Currently the parser uses a single string with newlines.
-        # A list of lines is also reasonable.
-        # A single (long) string is perhaps the most natural of all.
-        # This means we may need to deal with line wrapping.
-        comment = record.annotations["comment"]
-        if isinstance(comment, str):
-            lines = comment.split("\n")
-        elif isinstance(comment, (list, tuple)):
-            lines = comment
-        else:
-            raise ValueError("Could not understand comment annotation")
-        # TODO - Merge this with the GenBank comment code?
-        if not lines:
-            return
-        for line in lines:
-            self._write_multi_line("CC", line)
-        self.handle.write("XX\n")
-
-    def write_record(self, record):
-        """Write a single record to the output file."""
-        handle = self.handle
-        self._write_the_first_lines(record)
-
-        # PR line (0 or 1 lines only), project identifier
-        #
-        # Assuming can't use 2 lines, we should prefer newer GenBank
-        # DBLINK BioProject:... entries over the older GenBank DBLINK
-        # Project:... lines.
-        #
-        # In either case, seems EMBL usess just "PR    Project:..."
-        # regardless of the type of ID (old numeric only, or new
-        # with alpha prefix), e.g. for CP002497 NCBI now uses:
-        #
-        # DBLINK      BioProject: PRJNA60715
-        #             BioSample: SAMN03081426
-        #
-        # While EMBL uses:
-        #
-        # XX
-        # PR   Project:PRJNA60715;
-        # XX
-        #
-        # Sorting ensures (new) BioProject:... is before old Project:...
-        for xref in sorted(record.dbxrefs):
-            if xref.startswith("BioProject:"):
-                self._write_single_line("PR", xref[3:] + ";")
-                handle.write("XX\n")
-                break
-            if xref.startswith("Project:"):
-                self._write_single_line("PR", xref + ";")
-                handle.write("XX\n")
-                break
-
-        # TODO - DT lines (date)
-
-        descr = record.description
-        if descr == "<unknown description>":
-            descr = "."
-        self._write_multi_line("DE", descr)
-        handle.write("XX\n")
-
-        if "keywords" in record.annotations:
-            self._write_keywords(record)
-
-        # Should this be "source" or "organism"?
-        self._write_multi_line("OS", self._get_annotation_str(record, "organism"))
-        try:
-            # List of strings
-            taxonomy = "; ".join(record.annotations["taxonomy"]) + "."
-        except KeyError:
-            taxonomy = "."
-        self._write_multi_line("OC", taxonomy)
-        handle.write("XX\n")
-
-        if "references" in record.annotations:
-            self._write_references(record)
-
-        if "comment" in record.annotations:
-            self._write_comment(record)
-
-        handle.write(self.FEATURE_HEADER)
-        rec_length = len(record)
-        for feature in record.features:
-            self._write_feature(feature, rec_length)
-        handle.write("XX\n")
-
-        self._write_sequence(record)
-        handle.write("//\n")
-
-
-class ImgtWriter(EmblWriter):
-    """IMGT writer (EMBL format variant)."""
-
-    HEADER_WIDTH = 5
-    QUALIFIER_INDENT = 25  # Not 21 as in EMBL
-    QUALIFIER_INDENT_STR = "FT" + " " * (QUALIFIER_INDENT - 2)
-    QUALIFIER_INDENT_TMP = "FT   %s                    "  # 25 if %s is empty
-    FEATURE_HEADER = "FH   Key                 Location/Qualifiers\nFH\n"
-
-
 if __name__ == "__main__":
     from Bio._utils import run_doctest
 
     run_doctest(verbose=0)
+
+
+class _InsdcScanner:
+    """Basic functions for breaking up a GenBank/EMBL file into sub sections.
+
+    The International Nucleotide Sequence Database Collaboration (INSDC)
+    between the DDBJ, EMBL, and GenBank.  These organisations all use the
+    same "Feature Table" layout in their plain text flat file formats.
+
+    However, the header and sequence sections of an EMBL file are very
+    different in layout to those produced by GenBank/DDBJ.
+    """
+
+    # These constants get redefined with sensible values in the sub classes:
+    RECORD_START = "XXX"  # "LOCUS       " or "ID   "
+    HEADER_WIDTH = 3  # 12 or 5
+    FEATURE_START_MARKERS = ["XXX***FEATURES***XXX"]
+    FEATURE_END_MARKERS = ["XXX***END FEATURES***XXX"]
+    FEATURE_QUALIFIER_INDENT = 0
+    FEATURE_QUALIFIER_SPACER = ""
+    SEQUENCE_HEADERS = ["XXX"]  # with right hand side spaces removed
+
+    def __init__(self):
+        """Initialize."""
+        assert len(self.RECORD_START) == self.HEADER_WIDTH
+        for marker in self.SEQUENCE_HEADERS:
+            assert marker == marker.rstrip()
+        assert len(self.FEATURE_QUALIFIER_SPACER) == self.FEATURE_QUALIFIER_INDENT
+        self.handle = None
+        self.line = None
+
+    def set_handle(self, handle):
+        """Set the handle attribute."""
+        self.handle = handle
+        self.line = ""
+
+    def find_start(self):
+        """Read in lines until find the ID/LOCUS line, which is returned.
+
+        Any preamble (such as the header used by the NCBI on ``*.seq.gz`` archives)
+        will we ignored.
+        """
+        while True:
+            if self.line:
+                line = self.line
+                self.line = ""
+            else:
+                line = self.handle.readline()
+            if not line:
+                logging.debug("End of file")
+                return None
+            assert not isinstance(
+                line[0], int
+            ), "Is this handle in binary mode not text mode?"
+            if line[: self.HEADER_WIDTH] == self.RECORD_START:
+                logging.debug("Found the start of a record:\n" + line)
+                break
+            line = line.rstrip()
+            if line == "//":
+                logging.debug("Skipping // marking end of last record")
+            elif line == "":
+                logging.debug("Skipping blank line before record")
+            else:
+                logging.debug("Skipping header line before record:\n" + line)
+        self.line = line
+        return line
+
+    def parse_header(self):
+        """Return list of strings making up the header.
+
+        New line characters are removed.
+
+        Assumes you have just read in the ID/LOCUS line.
+        """
+        assert (
+            self.line[: self.HEADER_WIDTH] == self.RECORD_START
+        ), "Not at start of record"
+
+        header_lines = []
+        while True:
+            line = self.handle.readline()
+            assert line, "Premature end of line during sequence data"
+            line = line.rstrip()
+            if line in self.FEATURE_START_MARKERS:
+                logging.debug("Found feature table")
+                break
+            if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
+                logging.debug("Found start of sequence")
+                break
+            assert line != "//", "Premature end of sequence data marker '//' found"
+            header_lines.append(line)
+        self.line = line
+        return header_lines
+
+    def parse_features(self, skip=False):
+        """Return list of tuples for the features (if present).
+
+        Each feature is returned as a tuple (key, location, qualifiers)
+        where key and location are strings (e.g. "CDS" and
+        "complement(join(490883..490885,1..879))") while qualifiers
+        is a list of two string tuples (feature qualifier keys and values).
+
+        Assumes you have already read to the start of the features table.
+        """
+        if self.line.rstrip() not in self.FEATURE_START_MARKERS:
+            logging.debug("Didn't find any feature table")
+            return []
+
+        while self.line.rstrip() in self.FEATURE_START_MARKERS:
+            self.line = self.handle.readline()
+
+        features = []
+        line = self.line
+        while True:
+            assert line, "Premature end of line during features table"
+            if line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS:
+                logging.debug("Found start of sequence")
+                break
+            line = line.rstrip()
+            assert line != "//", "Premature end of features table, marker '//' found"
+            if line in self.FEATURE_END_MARKERS:
+                logging.debug("Found end of features")
+                line = self.handle.readline()
+                break
+            if line[2 : self.FEATURE_QUALIFIER_INDENT].strip() == "":
+                # This is an empty feature line between qualifiers. Empty
+                # feature lines within qualifiers are handled below (ignored).
+                line = self.handle.readline()
+                continue
+            if len(line) < self.FEATURE_QUALIFIER_INDENT:
+                warnings.warn(
+                    "line too short to contain a feature: %r" % line,
+                    BiopythonParserWarning,
+                )
+                line = self.handle.readline()
+                continue
+
+            if skip:
+                line = self.handle.readline()
+                while (
+                    line[: self.FEATURE_QUALIFIER_INDENT]
+                    == self.FEATURE_QUALIFIER_SPACER
+                ):
+                    line = self.handle.readline()
+            else:
+                # Build up a list of the lines making up this feature:
+                if (
+                    line[self.FEATURE_QUALIFIER_INDENT] != " "
+                    and " " in line[self.FEATURE_QUALIFIER_INDENT :]
+                ):
+                    # The feature table design enforces a length limit on the feature keys.
+                    # Some third party files (e.g. IGMT's EMBL like files) solve this by
+                    # over indenting the location and qualifiers.
+                    feature_key, line = line[2:].strip().split(None, 1)
+                    feature_lines = [line]
+                    warnings.warn(
+                        "Over indented %s feature?" % feature_key,
+                        BiopythonParserWarning,
+                    )
+                else:
+                    feature_key = line[2 : self.FEATURE_QUALIFIER_INDENT].strip()
+                    feature_lines = [line[self.FEATURE_QUALIFIER_INDENT :]]
+                line = self.handle.readline()
+                while line[
+                    : self.FEATURE_QUALIFIER_INDENT
+                ] == self.FEATURE_QUALIFIER_SPACER or (
+                    line != "" and line.rstrip() == ""
+                ):  # cope with blank lines in the midst of a feature
+                    # Use strip to remove any harmless trailing white space AND and leading
+                    # white space (e.g. out of spec files with too much indentation)
+                    feature_lines.append(line[self.FEATURE_QUALIFIER_INDENT :].strip())
+                    line = self.handle.readline()
+                features.append(parse_feature(feature_key, feature_lines))
+        self.line = line
+        return features
+
+    def parse_footer(self):
+        """Return a tuple containing a list of any misc strings, and the sequence."""
+        if self.line in self.FEATURE_END_MARKERS:
+            while self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS:
+                self.line = self.handle.readline()
+                assert self.line, "Premature end of file"
+                self.line = self.line.rstrip()
+
+        assert (
+            self.line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS
+        ), "Not at start of sequence"
+        while True:
+            line = self.handle.readline()
+            assert line, "Premature end of line during sequence data"
+            line = line.rstrip()
+            if line == "//":
+                break
+        self.line = line
+        return [], ""  # Dummy values!
+
+    def _feed_first_line(self, consumer, line):
+        """Handle the LOCUS/ID line, passing data to the consumer (PRIVATE).
+
+        This should be implemented by the EMBL / GenBank specific subclass
+
+        Used by the parse_records() and parse() methods.
+        """
+        pass
+
+    def _feed_header_lines(self, consumer, lines):
+        """Handle the header lines (list of strings), passing data to the consumer (PRIVATE).
+
+        This should be implemented by the EMBL / GenBank specific subclass
+
+        Used by the parse_records() and parse() methods.
+        """
+        pass
+
+    @staticmethod
+    def _feed_feature_table(consumer, feature_tuples):
+        """Handle the feature table (list of tuples), passing data to the consumer (PRIVATE).
+
+        Used by the parse_records() and parse() methods.
+        """
+        consumer.start_feature_table()
+        for feature_key, location_string, qualifiers in feature_tuples:
+            consumer.feature_key(feature_key)
+            consumer.location(location_string)
+            for q_key, q_value in qualifiers:
+                if q_value is None:
+                    consumer.feature_qualifier(q_key, q_value)
+                else:
+                    consumer.feature_qualifier(q_key, q_value.replace("\n", " "))
+
+    def _feed_misc_lines(self, consumer, lines):
+        """Handle any lines between features and sequence (list of strings), passing data to the consumer (PRIVATE).
+
+        This should be implemented by the EMBL / GenBank specific subclass
+
+        Used by the parse_records() and parse() methods.
+        """
+        pass
+
+    def feed(self, handle, consumer, do_features=True):
+        """Feed a set of data into the consumer.
+
+        This method is intended for use with the "old" code in Bio.GenBank
+
+        Arguments:
+         - handle - A handle with the information to parse.
+         - consumer - The consumer that should be informed of events.
+         - do_features - Boolean, should the features be parsed?
+           Skipping the features can be much faster.
+
+        Return values:
+         - true  - Passed a record
+         - false - Did not find a record
+
+        """
+        # Should work with both EMBL and GenBank files provided the
+        # equivalent Bio.GenBank._FeatureConsumer methods are called...
+        self.set_handle(handle)
+        if not self.find_start():
+            # Could not find (another) record
+            consumer.data = None
+            return False
+
+        # We use the above class methods to parse the file into a simplified format.
+        # The first line, header lines and any misc lines after the features will be
+        # dealt with by GenBank / EMBL specific derived classes.
+
+        # First line and header:
+        self._feed_first_line(consumer, self.line)
+        self._feed_header_lines(consumer, self.parse_header())
+
+        # Features (common to both EMBL and GenBank):
+        if do_features:
+            self._feed_feature_table(consumer, self.parse_features(skip=False))
+        else:
+            self.parse_features(skip=True)  # ignore the data
+
+        # Footer and sequence
+        misc_lines, sequence_string = self.parse_footer()
+        self._feed_misc_lines(consumer, misc_lines)
+
+        consumer.sequence(sequence_string)
+        # Calls to consumer.base_number() do nothing anyway
+        consumer.record_end("//")
+
+        assert self.line == "//"
+
+        # And we are done
+        return True
+
+    def parse(self, handle, do_features=True):
+        """Return a SeqRecord (with SeqFeatures if do_features=True).
+
+        See also the method parse_records() for use on multi-record files.
+        """
+        from Bio.GenBank import _FeatureConsumer
+        from Bio.SeqIO.utils import FeatureValueCleaner
+
+        consumer = _FeatureConsumer(
+            use_fuzziness=1, feature_cleaner=FeatureValueCleaner()
+        )
+
+        if self.feed(handle, consumer, do_features):
+            return consumer.data
+        else:
+            return None
+
+    def parse_records(self, handle, do_features=True):
+        """Parse records, return a SeqRecord object iterator.
+
+        Each record (from the ID/LOCUS line to the // line) becomes a SeqRecord
+
+        The SeqRecord objects include SeqFeatures if do_features=True
+
+        This method is intended for use in Bio.SeqIO
+        """
+        # This is a generator function
+        with as_handle(handle) as handle:
+            while True:
+                record = self.parse(handle, do_features)
+                if record is None:
+                    break
+                assert record.id, "Failed to parse the record's ID. Invalid ID line?"
+                assert (
+                    record.name != "<unknown name>"
+                ), "Failed to parse the record's name. Invalid ID line?"
+                assert (
+                    record.description != "<unknown description>"
+                ), "Failed to parse the record's description"
+                yield record
+
+    def parse_cds_features(
+        self,
+        handle,
+        alphabet=generic_protein,
+        tags2id=("protein_id", "locus_tag", "product"),
+    ):
+        """Parse CDS features, return SeqRecord object iterator.
+
+        Each CDS feature becomes a SeqRecord.
+
+        Arguments:
+         - alphabet - Used for any sequence found in a translation field.
+         - tags2id  - Tuple of three strings, the feature keys to use
+           for the record id, name and description,
+
+        This method is intended for use in Bio.SeqIO
+
+        """
+        with as_handle(handle) as handle:
+            self.set_handle(handle)
+            while self.find_start():
+                # Got an EMBL or GenBank record...
+                self.parse_header()  # ignore header lines!
+                feature_tuples = self.parse_features()
+                # self.parse_footer() # ignore footer lines!
+                while True:
+                    line = self.handle.readline()
+                    if not line:
+                        break
+                    if line[:2] == "//":
+                        break
+                self.line = line.rstrip()
+
+                # Now go though those features...
+                for key, location_string, qualifiers in feature_tuples:
+                    if key == "CDS":
+                        # Create SeqRecord
+                        # ================
+                        # SeqRecord objects cannot be created with annotations, they
+                        # must be added afterwards.  So create an empty record and
+                        # then populate it:
+                        record = SeqRecord(seq=None)
+                        annotations = record.annotations
+
+                        # Should we add a location object to the annotations?
+                        # I *think* that only makes sense for SeqFeatures with their
+                        # sub features...
+                        annotations["raw_location"] = location_string.replace(" ", "")
+
+                        for (qualifier_name, qualifier_data) in qualifiers:
+                            if (
+                                qualifier_data is not None
+                                and qualifier_data[0] == '"'
+                                and qualifier_data[-1] == '"'
+                            ):
+                                # Remove quotes
+                                qualifier_data = qualifier_data[1:-1]
+                            # Append the data to the annotation qualifier...
+                            if qualifier_name == "translation":
+                                assert record.seq is None, "Multiple translations!"
+                                record.seq = Seq(
+                                    qualifier_data.replace("\n", ""), alphabet
+                                )
+                            elif qualifier_name == "db_xref":
+                                # its a list, possibly empty.  Its safe to extend
+                                record.dbxrefs.append(qualifier_data)
+                            else:
+                                if qualifier_data is not None:
+                                    qualifier_data = qualifier_data.replace(
+                                        "\n", " "
+                                    ).replace("  ", " ")
+                                try:
+                                    annotations[qualifier_name] += " " + qualifier_data
+                                except KeyError:
+                                    # Not an addition to existing data, its the first bit
+                                    annotations[qualifier_name] = qualifier_data
+
+                        # Fill in the ID, Name, Description
+                        # =================================
+                        try:
+                            record.id = annotations[tags2id[0]]
+                        except KeyError:
+                            pass
+                        try:
+                            record.name = annotations[tags2id[1]]
+                        except KeyError:
+                            pass
+                        try:
+                            record.description = annotations[tags2id[2]]
+                        except KeyError:
+                            pass
+
+                        yield record
+
+
+def parse_feature(feature_key, lines):
+    r"""Parse a feature given as a list of strings into a tuple.
+
+    Expects a feature as a list of strings, returns a tuple (key, location,
+    qualifiers)
+
+    For example given this GenBank feature::
+
+         CDS             complement(join(490883..490885,1..879))
+                         /locus_tag="NEQ001"
+                         /note="conserved hypothetical [Methanococcus jannaschii];
+                         COG1583:Uncharacterized ACR; IPR001472:Bipartite nuclear
+                         localization signal; IPR002743: Protein of unknown
+                         function DUF57"
+                         /codon_start=1
+                         /transl_table=11
+                         /product="hypothetical protein"
+                         /protein_id="NP_963295.1"
+                         /db_xref="GI:41614797"
+                         /db_xref="GeneID:2732620"
+                         /translation="MRLLLELKALNSIDKKQLSNYLIQGFIYNILKNTEYSWLHNWKK
+                         EKYFNFTLIPKKDIIENKRYYLIISSPDKRFIEVLHNKIKDLDIITIGLAQFQLRKTK
+                         KFDPKLRFPWVTITPIVLREGKIVILKGDKYYKVFVKRLEELKKYNLIKKKEPILEEP
+                         IEISLNQIKDGWKIIDVKDRYYDFRNKSFSAFSNWLRDLKEQSLRKYNNFCGKNFYFE
+                         EAIFEGFTFYKTVSIRIRINRGEAVYIGTLWKELNVYRKLDKEEREFYKFLYDCGLGS
+                         LNSMGFGFVNTKKNSAR"
+
+    Then should give input key="CDS" and the rest of the data as a list of strings
+    lines=["complement(join(490883..490885,1..879))", ..., "LNSMGFGFVNTKKNSAR"]
+    where the leading spaces and trailing newlines have been removed.
+
+    Returns tuple containing: (key as string, location string, qualifiers as list)
+    as follows for this example:
+
+    key = "CDS", string
+    location = "complement(join(490883..490885,1..879))", string
+    qualifiers = list of string tuples:
+
+    [('locus_tag', '"NEQ001"'),
+     ('note', '"conserved hypothetical [Methanococcus jannaschii];\nCOG1583:..."'),
+     ('codon_start', '1'),
+     ('transl_table', '11'),
+     ('product', '"hypothetical protein"'),
+     ('protein_id', '"NP_963295.1"'),
+     ('db_xref', '"GI:41614797"'),
+     ('db_xref', '"GeneID:2732620"'),
+     ('translation', '"MRLLLELKALNSIDKKQLSNYLIQGFIYNILKNTEYSWLHNWKK\nEKYFNFT..."')]
+
+    In the above example, the "note" and "translation" were edited for compactness,
+    and they would contain multiple new line characters (displayed above as \n)
+
+    If a qualifier is quoted (in this case, everything except codon_start and
+    transl_table) then the quotes are NOT removed.
+
+    Note that no whitespace is removed.
+    """
+    iterator = (x for x in lines if x)
+    try:
+        line = next(iterator)
+
+        feature_location = line.strip()
+        while feature_location[-1:] == ",":
+            line = next(iterator)
+            feature_location += line.strip()
+        if feature_location.count("(") > feature_location.count(")"):
+            warnings.warn(
+                "Non-standard feature line wrapping (didn't break on comma)?",
+                BiopythonParserWarning,
+            )
+            while feature_location[-1:] == "," or feature_location.count(
+                "("
+            ) > feature_location.count(")"):
+                line = next(iterator)
+                feature_location += line.strip()
+
+        qualifiers = []
+
+        for line_number, line in enumerate(iterator):
+            if line_number == 0 and line.startswith(")"):
+                feature_location += line.strip()
+            elif line[0] == "/":
+                i = line.find("=")
+                key = line[1:i]
+                value = line[i + 1 :]
+                if i and value.startswith(" ") and value.lstrip().startswith('"'):
+                    warnings.warn(
+                        "White space after equals in qualifier", BiopythonParserWarning,
+                    )
+                    value = value.lstrip()
+                if i == -1:
+                    # Qualifier with no key, e.g. /pseudo
+                    key = line[1:]
+                    qualifiers.append((key, None))
+                elif not value:
+                    # ApE can output /note=
+                    qualifiers.append((key, ""))
+                elif value == '"':
+                    logging.debug("Single quote %s:%s" % (key, value))
+                    qualifiers.append((key, value))
+                elif value[0] == '"':
+                    value_list = [value]
+                    while value_list[-1][-1] != '"':
+                        value_list.append(next(iterator))
+                    value = "\n".join(value_list)
+                    qualifiers.append((key, value))
+                else:
+                    qualifiers.append((key, value))
+            else:
+                assert len(qualifiers) > 0
+                assert key == qualifiers[-1][0]
+                assert qualifiers[-1][1], StopIteration
+                qualifiers[-1] = (key, qualifiers[-1][1] + "\n" + line)
+        return feature_key, feature_location, qualifiers
+    except StopIteration:
+        raise ValueError(
+            "Problem with '%s' feature:\n%s" % (feature_key, "\n".join(lines))
+        ) from None

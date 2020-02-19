@@ -48,9 +48,8 @@ import warnings
 from Bio import BiopythonParserWarning
 
 # other Bio.GenBank stuff
-from .utils import FeatureValueCleaner
-from .Scanner import GenBankScanner
-
+from Bio.SeqIO.utils import FeatureValueCleaner
+from Bio.SeqIO.GenBankIO import GenBankScanner
 
 # Constants used to parse GenBank header lines
 GENBANK_INDENT = 12

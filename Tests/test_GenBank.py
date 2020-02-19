@@ -19,10 +19,14 @@ from datetime import datetime
 
 from io import StringIO
 
+from Bio.SeqIO.GenBankIO import GenBankScanner
+from Bio.SeqIO.ImgtIO import ImgtScanner
+from Bio.SeqIO.EmblIO import EmblScanner
 from Bio import BiopythonWarning
 from Bio import BiopythonParserWarning
 
 from Bio import SeqIO
+from Bio.SeqIO.utils import FeatureValueCleaner
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 from Bio.Alphabet import generic_dna
@@ -84,9 +88,7 @@ class TestBasics(unittest.TestCase):
 
     def test_cleaning_features(self):
         """Test the ability to clean up feature values."""
-        gb_parser = GenBank.FeatureParser(
-            feature_cleaner=GenBank.utils.FeatureValueCleaner()
-        )
+        gb_parser = GenBank.FeatureParser(feature_cleaner=FeatureValueCleaner())
         path = "GenBank/arab1.gb"
         with open(path) as handle:
             iterator = GenBank.Iterator(handle, gb_parser)
@@ -102,25 +104,25 @@ class TestBasics(unittest.TestCase):
     def test_ensembl_locus(self):
         """Test the ENSEMBL locus line."""
         line = "LOCUS       HG531_PATCH 1000000 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG531_PATCH")
         self.assertEqual(c._expected_size, 1000000)
         line = "LOCUS       HG531_PATCH 759984 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG531_PATCH")
         self.assertEqual(c._expected_size, 759984)
         line = "LOCUS       HG506_HG1000_1_PATCH 814959 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG506_HG1000_1_PATCH")
         self.assertEqual(c._expected_size, 814959)
         line = "LOCUS       HG506_HG1000_1_PATCH 1219964 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG506_HG1000_1_PATCH")
@@ -7018,7 +7020,7 @@ class LineOneTests(unittest.TestCase):
         for (line, topo, mol_type, div, warning_list) in tests:
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
-                scanner = GenBank.Scanner.GenBankScanner()
+                scanner = GenBankScanner()
                 consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
                 scanner._feed_first_line(consumer, line)
                 t = consumer.data.annotations.get("topology", None)
@@ -7090,7 +7092,7 @@ class LineOneTests(unittest.TestCase):
             ("ID   DI644510   standard; PRT;  1852 AA.", None, None, None),
         ]
         for (line, topo, mol_type, div) in tests:
-            scanner = GenBank.Scanner.EmblScanner()
+            scanner = EmblScanner()
             consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
             scanner._feed_first_line(consumer, line)
             t = consumer.data.annotations.get("topology", None)
@@ -7116,7 +7118,7 @@ class LineOneTests(unittest.TestCase):
             ("ID   HLA00001; SV 1; standard; DNA; HUM; 3503 BP.", None, "DNA", "HUM"),
         ]
         for (line, topo, mol_type, div) in tests:
-            scanner = GenBank.Scanner._ImgtScanner()
+            scanner = ImgtScanner()
             consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
             scanner._feed_first_line(consumer, line)
             t = consumer.data.annotations.get("topology", None)
@@ -7222,7 +7224,7 @@ class OutputTests(unittest.TestCase):
 class GenBankScannerTests(unittest.TestCase):
     """GenBank Scanner tests, test parsing gbk and embl files."""
 
-    gb_s = GenBank.Scanner.GenBankScanner()
+    gb_s = GenBankScanner()
 
     def gb_to_l_cds_f(self, filename, tags2id=None):
         """Gb file to Seq list parse CDS features."""
@@ -7329,7 +7331,7 @@ class GenBankScannerTests(unittest.TestCase):
 
     def test_embl_cds_interaction(self):
         """Test EMBL CDS interaction, parse CDS features on embl files."""
-        embl_s = GenBank.Scanner.EmblScanner()
+        embl_s = EmblScanner()
 
         # Test parse CDS features on embl_file
         with open("EMBL/AE017046.embl") as handle_embl7046:
@@ -7342,7 +7344,7 @@ class GenBankScannerTests(unittest.TestCase):
 
     def test_embl_record_interaction(self):
         """Test EMBL Record interaction on embl files."""
-        embl_s = GenBank.Scanner.EmblScanner()
+        embl_s = EmblScanner()
 
         #  Test parse records on embl_file
         with open("EMBL/AE017046.embl") as handle_embl7046:

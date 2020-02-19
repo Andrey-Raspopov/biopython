@@ -379,7 +379,9 @@ import sys
 # See also http://biopython.org/wiki/SeqIO_dev
 #
 # --Peter
-
+import Bio.SeqIO.EmblIO
+import Bio.SeqIO.GenBankIO
+import Bio.SeqIO.ImgtIO
 from Bio.File import as_handle
 from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
@@ -389,6 +391,9 @@ from . import AbiIO
 from . import AceIO
 from . import FastaIO
 from . import GckIO
+from . import EmblIO
+from . import GenBankIO
+from . import ImgtIO
 from . import IgIO  # IntelliGenetics or MASE format
 from . import InsdcIO  # EMBL and GenBank
 from . import NibIO
@@ -420,13 +425,13 @@ _FormatToIterator = {
     "fasta": FastaIO.FastaIterator,
     "fasta-2line": FastaIO.FastaTwoLineIterator,
     "ig": IgIO.IgIterator,
-    "embl": InsdcIO.EmblIterator,
-    "embl-cds": InsdcIO.EmblCdsFeatureIterator,
-    "gb": InsdcIO.GenBankIterator,
+    "embl": EmblIO.EmblIterator,
+    "embl-cds": EmblIO.EmblCdsFeatureIterator,
+    "gb": GenBankIO.GenBankIterator,
     "gck": GckIO.GckIterator,
-    "genbank": InsdcIO.GenBankIterator,
-    "genbank-cds": InsdcIO.GenBankCdsFeatureIterator,
-    "imgt": InsdcIO.ImgtIterator,
+    "genbank": GenBankIO.GenBankIterator,
+    "genbank-cds": GenBankIO.GenBankCdsFeatureIterator,
+    "imgt": ImgtIO.ImgtIterator,
     "nib": NibIO.NibIterator,
     "cif-seqres": PdbIO.CifSeqresIterator,
     "cif-atom": PdbIO.CifAtomIterator,
@@ -466,10 +471,10 @@ _FormatToString = {
 _FormatToWriter = {
     "fasta": FastaIO.FastaWriter,
     "fasta-2line": FastaIO.FastaTwoLineWriter,
-    "gb": InsdcIO.GenBankWriter,
-    "genbank": InsdcIO.GenBankWriter,
-    "embl": InsdcIO.EmblWriter,
-    "imgt": InsdcIO.ImgtWriter,
+    "gb": GenBankIO.GenBankWriter,
+    "genbank": GenBankIO.GenBankWriter,
+    "embl": EmblIO.EmblWriter,
+    "imgt": ImgtIO.ImgtWriter,
     "nib": NibIO.NibWriter,
     "phd": PhdIO.PhdWriter,
     "pir": PirIO.PirWriter,
