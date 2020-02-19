@@ -19,10 +19,14 @@ from datetime import datetime
 
 from io import StringIO
 
+from Bio.SeqIO.GenBankIO import GenBankScanner
+from Bio.SeqIO.ImgtIO import ImgtScanner
+from Bio.SeqIO.EmblIO import EmblScanner
 from Bio import BiopythonWarning
 from Bio import BiopythonParserWarning
 
 from Bio import SeqIO
+from Bio.SeqIO.utils import FeatureValueCleaner
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 from Bio.Alphabet import generic_dna
@@ -68,7 +72,7 @@ class TestBasics(unittest.TestCase):
         # locations won't work exactly
         # don't test writing on blank_seq because it lacks a sequence type
         # don't test dbsource_wrap because it is a junky RefSeq file
-        record_parser = GenBank.RecordParser(debug_level=0)
+        record_parser = GenBank.RecordParser()
         for filename in filenames:
             path = os.path.join("GenBank", filename)
             with open(path) as cur_handle, open(path) as compare_handle:
@@ -84,9 +88,7 @@ class TestBasics(unittest.TestCase):
 
     def test_cleaning_features(self):
         """Test the ability to clean up feature values."""
-        gb_parser = GenBank.FeatureParser(
-            feature_cleaner=GenBank.utils.FeatureValueCleaner()
-        )
+        gb_parser = GenBank.FeatureParser(feature_cleaner=FeatureValueCleaner())
         path = "GenBank/arab1.gb"
         with open(path) as handle:
             iterator = GenBank.Iterator(handle, gb_parser)
@@ -102,25 +104,25 @@ class TestBasics(unittest.TestCase):
     def test_ensembl_locus(self):
         """Test the ENSEMBL locus line."""
         line = "LOCUS       HG531_PATCH 1000000 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG531_PATCH")
         self.assertEqual(c._expected_size, 1000000)
         line = "LOCUS       HG531_PATCH 759984 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG531_PATCH")
         self.assertEqual(c._expected_size, 759984)
         line = "LOCUS       HG506_HG1000_1_PATCH 814959 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG506_HG1000_1_PATCH")
         self.assertEqual(c._expected_size, 814959)
         line = "LOCUS       HG506_HG1000_1_PATCH 1219964 bp DNA HTG 18-JUN-2011\n"
-        s = GenBank.Scanner.GenBankScanner()
+        s = GenBankScanner()
         c = GenBank._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG506_HG1000_1_PATCH")
@@ -130,7 +132,7 @@ class TestBasics(unittest.TestCase):
 class TestRecordParser(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.rec_parser = GenBank.RecordParser(debug_level=0)
+        cls.rec_parser = GenBank.RecordParser()
 
     def perform_record_parser_test(
         self,
@@ -394,7 +396,7 @@ class TestRecordParser(unittest.TestCase):
                         ("/protein_id=", '"CAB39890.1"'),
                         ("/db_xref=", '"GI:4538893"'),
                         ("/translation=", '"DKAKDAAAAAGASAQQAGKNISDAAAGGVNFVKEKTG"'),
-                        ),
+                    ),
                 ),
                 ("intron", "49..142", (("/gene=", '"csp14"'), ("/number=", "2"))),
                 ("exon", "143..206", (("/gene=", '"csp14"'), ("/number=", "3"))),
@@ -1519,9 +1521,7 @@ class TestRecordParser(unittest.TestCase):
             record = next(records)
             length = 2007
             locus = "AB000048"
-            definition = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            definition = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             accession = ["AB000048"]
             titles = (
                 "Evolutionary pattern of feline panleukopenia virus differs from that of canine parvovirus",
@@ -1558,9 +1558,7 @@ class TestRecordParser(unittest.TestCase):
             record = next(records)
             length = 2007
             locus = "AB000049"
-            definition = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            definition = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             accession = ["AB000049"]
             titles = (
                 "Evolutionary pattern of feline panleukopenia virus differs that of canine parvovirus",
@@ -1597,7 +1595,9 @@ class TestRecordParser(unittest.TestCase):
             record = next(records)
             length = 1755
             locus = "AB000050"
-            definition = "Feline panleukopenia virus DNA for capsid protein 2, complete cds"
+            definition = (
+                "Feline panleukopenia virus DNA for capsid protein 2, complete cds"
+            )
             accession = ["AB000050"]
             titles = (
                 "Evolutionary pattern of feline panleukopenia virus differs from that of canine parvovirus",
@@ -2507,7 +2507,7 @@ class TestRecordParser(unittest.TestCase):
 class TestFeatureParser(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.feat_parser = GenBank.FeatureParser(debug_level=0)
+        cls.feat_parser = GenBank.FeatureParser()
 
     def shorten(self, seq):
         if len(seq) <= 60:
@@ -4944,9 +4944,7 @@ qualifiers:
             seq = "ATGTCTGGCAACCAGTATACTGAGGAAGTTATGGAGGGAGTAAATTGGTTAAAG...TAA"
             id = "AB000048.1"
             name = "AB000048"
-            description = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            description = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             annotations = {
                 "accessions": ["AB000048"],
                 "data_file_division": "VRL",
@@ -5015,9 +5013,7 @@ qualifiers:
             seq = "ATGTCTGGCAACCAGTATACTGAGGAAGTTATGGAGGGAGTAAATTGGTTAAAG...TAA"
             id = "AB000049.1"
             name = "AB000049"
-            description = (
-                "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
-            )
+            description = "Feline panleukopenia virus DNA for nonstructural protein 1, complete cds"
             annotations = {
                 "accessions": ["AB000049"],
                 "data_file_division": "VRL",
@@ -5845,6 +5841,7 @@ qualifiers:
             "date": "11-OCT-2001",
             "gi": "15823953",
             "keywords": [""],
+            "molecule_type": "DNA",
             "organism": "Streptomyces avermitilis",
             "sequence_version": 1,
             "source": "Streptomyces avermitilis",
@@ -6341,7 +6338,7 @@ class GenBankTests(unittest.TestCase):
     def test_invalid_product_line_raises_value_error(self):
         """Parsing invalid product line."""
         path = "GenBank/invalid_product.gb"
-        self.assertRaises(ValueError, SeqIO.read, path, "genbank")
+        self.assertRaises(AssertionError, SeqIO.read, path, "genbank")
 
     def test_genbank_read(self):
         """GenBank.read(...) simple test."""
@@ -6366,7 +6363,7 @@ class GenBankTests(unittest.TestCase):
         """GenBank.read(...) error on malformed file."""
         path = "GenBank/no_origin_no_end.gb"
         with open(path) as handle:
-            self.assertRaises(ValueError, GenBank.read, handle)
+            self.assertRaises(AssertionError, GenBank.read, handle)
 
     # Evil hack with 000 to manipulate sort order to ensure this is tested
     # first (otherwise something silences the warning)
@@ -6965,7 +6962,7 @@ KEYWORDS    """
                 long_in_tmp.seek(0)
                 record = SeqIO.read(long_in_tmp, "genbank")
 
-            self.assertRaises(ValueError, read_longer_than_maxsize)
+            self.assertRaises(AssertionError, read_longer_than_maxsize)
 
 
 class LineOneTests(unittest.TestCase):
@@ -7010,21 +7007,20 @@ class LineOneTests(unittest.TestCase):
                 "circular",
                 "DNA",
                 None,
-                [BiopythonParserWarning],
+                None,
             ),
-            # This is a test of the format > 80 chars long
             (
                 "LOCUS       AZZZAA02123456789 1000000000 bp    DNA     linear   PRI 15-OCT-2018",
                 "linear",
                 "DNA",
                 "PRI",
-                None,
+                [BiopythonParserWarning],
             ),
         ]
         for (line, topo, mol_type, div, warning_list) in tests:
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
-                scanner = GenBank.Scanner.GenBankScanner()
+                scanner = GenBankScanner()
                 consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
                 scanner._feed_first_line(consumer, line)
                 t = consumer.data.annotations.get("topology", None)
@@ -7096,7 +7092,7 @@ class LineOneTests(unittest.TestCase):
             ("ID   DI644510   standard; PRT;  1852 AA.", None, None, None),
         ]
         for (line, topo, mol_type, div) in tests:
-            scanner = GenBank.Scanner.EmblScanner()
+            scanner = EmblScanner()
             consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
             scanner._feed_first_line(consumer, line)
             t = consumer.data.annotations.get("topology", None)
@@ -7122,7 +7118,7 @@ class LineOneTests(unittest.TestCase):
             ("ID   HLA00001; SV 1; standard; DNA; HUM; 3503 BP.", None, "DNA", "HUM"),
         ]
         for (line, topo, mol_type, div) in tests:
-            scanner = GenBank.Scanner._ImgtScanner()
+            scanner = ImgtScanner()
             consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
             scanner._feed_first_line(consumer, line)
             t = consumer.data.annotations.get("topology", None)
@@ -7228,7 +7224,7 @@ class OutputTests(unittest.TestCase):
 class GenBankScannerTests(unittest.TestCase):
     """GenBank Scanner tests, test parsing gbk and embl files."""
 
-    gb_s = GenBank.Scanner.GenBankScanner()
+    gb_s = GenBankScanner()
 
     def gb_to_l_cds_f(self, filename, tags2id=None):
         """Gb file to Seq list parse CDS features."""
@@ -7335,7 +7331,7 @@ class GenBankScannerTests(unittest.TestCase):
 
     def test_embl_cds_interaction(self):
         """Test EMBL CDS interaction, parse CDS features on embl files."""
-        embl_s = GenBank.Scanner.EmblScanner()
+        embl_s = EmblScanner()
 
         # Test parse CDS features on embl_file
         with open("EMBL/AE017046.embl") as handle_embl7046:
@@ -7348,7 +7344,7 @@ class GenBankScannerTests(unittest.TestCase):
 
     def test_embl_record_interaction(self):
         """Test EMBL Record interaction on embl files."""
-        embl_s = GenBank.Scanner.EmblScanner()
+        embl_s = EmblScanner()
 
         #  Test parse records on embl_file
         with open("EMBL/AE017046.embl") as handle_embl7046:
