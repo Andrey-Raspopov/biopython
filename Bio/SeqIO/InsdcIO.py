@@ -240,66 +240,59 @@ def parse_feature(feature_key, lines):
     """
     iterator = (x for x in lines if x)
     try:
-        line = next(iterator)
-
-        feature_location = line.strip()
-        while True:
-            if feature_location[-1:] != ",":
-                if feature_location.count("(") > feature_location.count(")"):
-                    warnings.warn(
-                        "Non-standard feature line wrapping (didn't break on comma)?",
-                        BiopythonParserWarning,
-                    )
-                    line = next(iterator)
-                    feature_location += line.strip()
-                else:
-                    break
-            else:
-                line = next(iterator)
-                feature_location += line.strip()
+        feature_location = _extract_feature_location(iterator)
 
         qualifiers = []
+        key = None
 
         for line_number, line in enumerate(iterator):
-            if line_number == 0 and line.startswith(")"):
-                feature_location += line.strip()
-            elif line[0] == "/":
-                i = line.find("=")
-                key = line[1:i]
-                value = line[i + 1 :]
-                if i and value.startswith(" ") and value.lstrip().startswith('"'):
-                    warnings.warn(
-                        "White space after equals in qualifier", BiopythonParserWarning,
-                    )
-                    value = value.lstrip()
-                if i == -1:
-                    # Qualifier with no key, e.g. /pseudo
-                    key = line[1:]
-                    qualifiers.append((key, None))
-                elif not value:
-                    # ApE can output /note=
-                    qualifiers.append((key, ""))
-                elif value == '"':
-                    logging.debug("Single quote %s:%s" % (key, value))
-                    qualifiers.append((key, value))
-                elif value[0] == '"':
-                    value_list = [value]
-                    while value_list[-1][-1] != '"':
-                        value_list.append(next(iterator))
-                    value = "\n".join(value_list)
-                    qualifiers.append((key, value))
-                else:
-                    qualifiers.append((key, value))
+            if line[0] == "/":
+                line = line[1:]
+                try:
+                    key, value = line.split("=", 1)
+                except ValueError:
+                    key = line
+                    value = None
+                if value:
+                    if value.startswith(" ") and value.lstrip().startswith('"'):
+                        warnings.warn(
+                            "White space after equals in qualifier",
+                            BiopythonParserWarning,
+                        )
+                    elif value == '"':
+                        logging.debug("Single quote %s:%s" % (key, value))
+                    elif value[0] == '"':
+                        while value[-1] != '"':
+                            value += f"\n{next(iterator)}"
+                    value = value.strip()
+                qualifiers.append((key, value))
             else:
                 assert len(qualifiers) > 0
                 assert key == qualifiers[-1][0]
                 assert qualifiers[-1][1], StopIteration
-                qualifiers[-1] = (key, qualifiers[-1][1] + "\n" + line)
+                qualifiers[-1] = (key, f"{qualifiers[-1][1]}\n{line}")
         return feature_key, feature_location, qualifiers
     except StopIteration:
         raise ValueError(
             "Problem with '%s' feature:\n%s" % (feature_key, "\n".join(lines))
         ) from None
+
+
+def _extract_feature_location(iterator):
+    feature_location = next(iterator).strip()
+    while True:
+        if feature_location[-1:] != ",":
+            if feature_location.count("(") > feature_location.count(")"):
+                warnings.warn(
+                    "Non-standard feature line wrapping (didn't break on comma)?",
+                    BiopythonParserWarning,
+                )
+                feature_location += next(iterator).strip()
+            else:
+                break
+        else:
+            feature_location += next(iterator).strip()
+    return feature_location
 
 
 class _InsdcWriter(SequentialSequenceWriter):
