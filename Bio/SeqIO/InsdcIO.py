@@ -37,6 +37,7 @@ from Bio.File import as_handle
 from Bio.Seq import Seq
 
 from Bio.SeqIO.Interfaces import SequentialSequenceWriter
+from Bio.SeqIO.Interfaces import SequenceWriter
 from Bio import SeqFeature
 
 # NOTE
