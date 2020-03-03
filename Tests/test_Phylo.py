@@ -124,7 +124,7 @@ class IOTests(unittest.TestCase):
         Phylo.write(tree, mem_file, "newick", format_branch_length="%.0e")
         # Py2.5 compat: Windows with Py2.5- represents this as 1e-001;
         # on all other platforms it's 1e-01
-        self.assertTrue(mem_file.getvalue().strip() in ["A:1e-01;", "A:1e-001;"])
+        self.assertIn(mem_file.getvalue().strip(), ["A:1e-01;", "A:1e-001;"])
 
     def test_convert(self):
         """Convert a tree between all supported formats."""
@@ -262,7 +262,7 @@ class MixinTests(unittest.TestCase):
         tree = self.phylogenies[5]
         matches = list(tree.find_elements(PhyloXML.Taxonomy, code="OCTVU"))
         self.assertEqual(len(matches), 1)
-        self.assertTrue(isinstance(matches[0], PhyloXML.Taxonomy))
+        self.assertIsInstance(matches[0], PhyloXML.Taxonomy)
         self.assertEqual(matches[0].code, "OCTVU")
         self.assertEqual(matches[0].scientific_name, "Octopus vulgaris")
         # Iteration and regexps
@@ -270,7 +270,7 @@ class MixinTests(unittest.TestCase):
         for point, alt in zip(
             tree.find_elements(geodetic_datum=r"WGS\d{2}"), (472, 10, 452)
         ):
-            self.assertTrue(isinstance(point, PhyloXML.Point))
+            self.assertIsInstance(point, PhyloXML.Point)
             self.assertEqual(point.geodetic_datum, "WGS84")
             self.assertAlmostEqual(point.alt, alt)
         # class filter
@@ -297,12 +297,12 @@ class MixinTests(unittest.TestCase):
         for clade, name in zip(
             self.phylogenies[10].find_clades(name=True), list("ABCD")
         ):
-            self.assertTrue(isinstance(clade, PhyloXML.Clade))
+            self.assertIsInstance(clade, PhyloXML.Clade)
             self.assertEqual(clade.name, name)
         # finding deeper attributes
         octo = list(self.phylogenies[5].find_clades(code="OCTVU"))
         self.assertEqual(len(octo), 1)
-        self.assertTrue(isinstance(octo[0], PhyloXML.Clade))
+        self.assertIsInstance(octo[0], PhyloXML.Clade)
         self.assertEqual(octo[0].taxonomies[0].code, "OCTVU")
         # string filter
         dee = next(self.phylogenies[10].find_clades("D"))
