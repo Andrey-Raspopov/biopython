@@ -276,7 +276,7 @@ names are also used in Bio.AlignIO and include the following:
     - cif-seqres - Reads a macromolecular Crystallographic Information File
       (mmCIF) file to determine the complete protein sequence as defined by the
       _pdbx_poly_seq_scheme records.
-    - embl    - The EMBL flat file format. Uses Bio.GenBank internally.
+    - embl    - The EMBL flat file format.
     - fasta   - The generic sequence file format where each record starts with
       an identifer line starting with a ">" character, followed by
       lines of sequence.

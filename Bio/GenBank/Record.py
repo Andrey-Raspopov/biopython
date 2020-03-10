@@ -14,6 +14,7 @@ Classes:
 """
 
 import Bio.GenBank
+import Bio.SeqIO.GenBankIO
 
 
 def _wrapped_genbank(information, indent, wrap_space=1, split_char=" "):
@@ -660,7 +661,7 @@ class Qualifier:
         output = " " * Record.GB_FEATURE_INDENT
         # determine whether we can wrap on spaces
         space_wrap = 1
-        for no_space_key in Bio.GenBank._BaseGenBankConsumer.remove_space_keys:
+        for no_space_key in Bio.SeqIO.GenBankIO._BaseGenBankConsumer.remove_space_keys:
             if no_space_key in self.key:
                 space_wrap = 0
         # return double quotes as-is, leave it to the user to escape them

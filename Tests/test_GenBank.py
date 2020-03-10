@@ -19,6 +19,7 @@ from datetime import datetime
 
 from io import StringIO
 
+import Bio.SeqIO.GenBankIO
 from Bio.SeqIO.GenBankIO import GenBankScanner
 from Bio.SeqIO.ImgtIO import ImgtScanner
 from Bio.SeqIO.EmblIO import EmblScanner
@@ -105,25 +106,25 @@ class TestBasics(unittest.TestCase):
         """Test the ENSEMBL locus line."""
         line = "LOCUS       HG531_PATCH 1000000 bp DNA HTG 18-JUN-2011\n"
         s = GenBankScanner()
-        c = GenBank._FeatureConsumer(True)
+        c = Bio.SeqIO.GenBankIO._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG531_PATCH")
         self.assertEqual(c._expected_size, 1000000)
         line = "LOCUS       HG531_PATCH 759984 bp DNA HTG 18-JUN-2011\n"
         s = GenBankScanner()
-        c = GenBank._FeatureConsumer(True)
+        c = Bio.SeqIO.GenBankIO._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG531_PATCH")
         self.assertEqual(c._expected_size, 759984)
         line = "LOCUS       HG506_HG1000_1_PATCH 814959 bp DNA HTG 18-JUN-2011\n"
         s = GenBankScanner()
-        c = GenBank._FeatureConsumer(True)
+        c = Bio.SeqIO.GenBankIO._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG506_HG1000_1_PATCH")
         self.assertEqual(c._expected_size, 814959)
         line = "LOCUS       HG506_HG1000_1_PATCH 1219964 bp DNA HTG 18-JUN-2011\n"
         s = GenBankScanner()
-        c = GenBank._FeatureConsumer(True)
+        c = Bio.SeqIO.GenBankIO._FeatureConsumer(True)
         s._feed_first_line(c, line)
         self.assertEqual(c.data.name, "HG506_HG1000_1_PATCH")
         self.assertEqual(c._expected_size, 1219964)
@@ -7021,7 +7022,7 @@ class LineOneTests(unittest.TestCase):
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
                 scanner = GenBankScanner()
-                consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
+                consumer = Bio.SeqIO.GenBankIO._FeatureConsumer(1, GenBank.FeatureValueCleaner)
                 scanner._feed_first_line(consumer, line)
                 t = consumer.data.annotations.get("topology", None)
                 self.assertEqual(
@@ -7093,7 +7094,7 @@ class LineOneTests(unittest.TestCase):
         ]
         for (line, topo, mol_type, div) in tests:
             scanner = EmblScanner()
-            consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
+            consumer = Bio.SeqIO.GenBankIO._FeatureConsumer(1, GenBank.FeatureValueCleaner)
             scanner._feed_first_line(consumer, line)
             t = consumer.data.annotations.get("topology", None)
             self.assertEqual(
@@ -7119,7 +7120,7 @@ class LineOneTests(unittest.TestCase):
         ]
         for (line, topo, mol_type, div) in tests:
             scanner = ImgtScanner()
-            consumer = GenBank._FeatureConsumer(1, GenBank.FeatureValueCleaner)
+            consumer = Bio.SeqIO.GenBankIO._FeatureConsumer(1, GenBank.FeatureValueCleaner)
             scanner._feed_first_line(consumer, line)
             t = consumer.data.annotations.get("topology", None)
             self.assertEqual(

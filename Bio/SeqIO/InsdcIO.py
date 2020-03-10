@@ -6,10 +6,6 @@
 # package.
 """Bio.SeqIO support for the "genbank" and "embl" file formats.
 
-You are expected to use this module via the Bio.SeqIO functions.
-Note that internally this module calls Bio.GenBank to do the actual
-parsing of GenBank, EMBL and IMGT files.
-
 See Also:
 International Nucleotide Sequence Database Collaboration
 http://www.insdc.org/
@@ -37,15 +33,8 @@ from Bio.File import as_handle
 from Bio.Seq import Seq
 
 from Bio.SeqIO.Interfaces import SequentialSequenceWriter
-from Bio.SeqIO.Interfaces import SequenceWriter
 from Bio import SeqFeature
 
-# NOTE
-# ====
-# The "brains" for parsing GenBank, EMBL and IMGT files (and any
-# other flat file variants from the INSDC in future) is in
-# Bio.GenBank.Scanner (plus the _FeatureConsumer in Bio.GenBank)
-# However, all the writing code is in this file.
 from Bio.SeqRecord import SeqRecord
 
 
@@ -91,12 +80,7 @@ def _insdc_location_string_ignoring_strand_and_subfeatures(location, rec_length)
         and isinstance(location.end, SeqFeature.ExactPosition)
         and location.start.position == location.end.position
     ):
-        # Special case, for 12:12 return 12^13
-        # (a zero length slice, meaning the point between two letters)
         if location.end.position == rec_length:
-            # Very special case, for a between position at the end of a
-            # sequence (used on some circular genomes, Bug 3098) we have
-            # N:N so return N^1
             return "%s%i^1" % (ref, rec_length)
         else:
             return "%s%i^%i" % (ref, location.end.position, location.end.position + 1)
@@ -105,35 +89,27 @@ def _insdc_location_string_ignoring_strand_and_subfeatures(location, rec_length)
         and isinstance(location.end, SeqFeature.ExactPosition)
         and location.start.position + 1 == location.end.position
     ):
-        # Special case, for 11:12 return 12 rather than 12..12
-        # (a length one slice, meaning a single letter)
         return "%s%i" % (ref, location.end.position)
     elif isinstance(location.start, SeqFeature.UnknownPosition) or isinstance(
         location.end, SeqFeature.UnknownPosition
     ):
-        # Special case for features from SwissProt/UniProt files
         if isinstance(location.start, SeqFeature.UnknownPosition) and isinstance(
             location.end, SeqFeature.UnknownPosition
         ):
-            # warnings.warn("Feature with unknown location", BiopythonWarning)
-            # return "?"
             raise ValueError("Feature with unknown location")
         elif isinstance(location.start, SeqFeature.UnknownPosition):
-            # Treat the unknown start position as a BeforePosition
             return "%s<%i..%s" % (
                 ref,
                 location.nofuzzy_end,
                 _insdc_feature_position_string(location.end),
             )
         else:
-            # Treat the unknown end position as an AfterPosition
             return "%s%s..>%i" % (
                 ref,
                 _insdc_feature_position_string(location.start, +1),
                 location.nofuzzy_start + 1,
             )
     else:
-        # Typical case, e.g. 12..15 gets mapped to 11:15
         return (
             ref
             + _insdc_feature_position_string(location.start, +1)
@@ -155,9 +131,7 @@ def _insdc_location_string(location, rec_length):
     """
     try:
         parts = location.parts
-        # CompoundFeatureLocation
         if location.strand == -1:
-            # Special case, put complement outside the join/order/... and reverse order
             return "complement(%s(%s))" % (
                 location.operator,
                 ",".join(
@@ -173,7 +147,6 @@ def _insdc_location_string(location, rec_length):
                 ",".join(_insdc_location_string(p, rec_length) for p in parts),
             )
     except AttributeError:
-        # Simple FeatureLocation
         loc = _insdc_location_string_ignoring_strand_and_subfeatures(
             location, rec_length
         )
@@ -302,7 +275,7 @@ class _InsdcWriter(SequentialSequenceWriter):
     MAX_WIDTH = 80
     QUALIFIER_INDENT = 21
     QUALIFIER_INDENT_STR = " " * QUALIFIER_INDENT
-    QUALIFIER_INDENT_TMP = "     %s                "  # 21 if %s is empty
+    QUALIFIER_INDENT_TMP = "     %s                "
     FTQUAL_NO_QUOTE = (
         "anticodon",
         "citation",
@@ -321,19 +294,15 @@ class _InsdcWriter(SequentialSequenceWriter):
 
     def _write_feature_qualifier(self, key, value=None, quote=None):
         if value is None:
-            # Value-less entry like /pseudo
             self.handle.write("%s/%s\n" % (self.QUALIFIER_INDENT_STR, key))
             return
 
         if type(value) == str:
             value = value.replace(
                 '"', '""'
-            )  # NCBI says escape " as "" in qualifier values
+            )
 
-        # Quick hack with no line wrapping, may be useful for testing:
-        # self.handle.write('%s/%s="%s"\n' % (self.QUALIFIER_INDENT_STR, key, value))
         if quote is None:
-            # Try to mimic unwritten rules about when quotes can be left out:
             if isinstance(value, int) or key in self.FTQUAL_NO_QUOTE:
                 quote = False
             else:
@@ -349,28 +318,24 @@ class _InsdcWriter(SequentialSequenceWriter):
             if len(line) <= self.MAX_WIDTH:
                 self.handle.write(line + "\n")
                 return
-            # Insert line break...
             for index in range(
                 min(len(line) - 1, self.MAX_WIDTH), self.QUALIFIER_INDENT + 1, -1
             ):
                 if line[index] == " ":
                     break
             if line[index] != " ":
-                # No nice place to break...
                 index = self.MAX_WIDTH
             assert index <= self.MAX_WIDTH
             self.handle.write(line[:index] + "\n")
             line = self.QUALIFIER_INDENT_STR + line[index:].lstrip()
 
     def _wrap_location(self, location):
-        """Split a feature location into lines (break at commas) (PRIVATE)."""
         # TODO - Rewrite this not to recurse!
         length = self.MAX_WIDTH - self.QUALIFIER_INDENT
         if len(location) <= length:
             return location
         index = location[:length].rfind(",")
         if index == -1:
-            # No good place to split (!)
             warnings.warn("Couldn't split location:\n%s" % location, BiopythonWarning)
             return location
         return (
@@ -381,7 +346,6 @@ class _InsdcWriter(SequentialSequenceWriter):
         )
 
     def _write_feature(self, feature, record_length):
-        """Write a single SeqFeature object to features table (PRIVATE)."""
         assert feature.type, feature
         location = _insdc_location_string(feature.location, record_length)
         f_type = feature.type.replace(" ", "_")
@@ -391,14 +355,11 @@ class _InsdcWriter(SequentialSequenceWriter):
             + "\n"
         )
         self.handle.write(line)
-        # Now the qualifiers...
-        # Note as of Biopython 1.69, this is an ordered-dict, don't sort it:
         for key, values in feature.qualifiers.items():
             if isinstance(values, (list, tuple)):
                 for value in values:
                     self._write_feature_qualifier(key, value)
             else:
-                # String, int, etc - or None for a /pseudo tpy entry
                 self._write_feature_qualifier(key, values)
 
     @staticmethod
@@ -437,14 +398,12 @@ class _InsdcWriter(SequentialSequenceWriter):
         while words and len(text) + 1 + len(words[0]) <= max_len:
             text += " " + words.pop(0)
             text = text.strip()
-        # assert len(text) <= max_len
         answer = [text]
         while words:
             text = words.pop(0)
             while words and len(text) + 1 + len(words[0]) <= max_len:
                 text += " " + words.pop(0)
                 text = text.strip()
-            # assert len(text) <= max_len
             answer.append(text)
         assert not words
         return answer
@@ -461,7 +420,6 @@ class _InsdcWriter(SequentialSequenceWriter):
         answer = []
         while contig:
             if len(contig) > max_len:
-                # Split lines at the commas
                 pos = contig[: max_len - 1].rfind(",")
                 if pos == -1:
                     raise ValueError("Could not break up CONTIG")
@@ -483,14 +441,13 @@ class _InsdcScanner:
     different in layout to those produced by GenBank/DDBJ.
     """
 
-    # These constants get redefined with sensible values in the sub classes:
-    RECORD_START = "XXX"  # "LOCUS       " or "ID   "
-    HEADER_WIDTH = 3  # 12 or 5
+    RECORD_START = "XXX"
+    HEADER_WIDTH = 3
     FEATURE_START_MARKERS = ["XXX***FEATURES***XXX"]
     FEATURE_END_MARKERS = ["XXX***END FEATURES***XXX"]
     FEATURE_QUALIFIER_INDENT = 0
     FEATURE_QUALIFIER_SPACER = ""
-    SEQUENCE_HEADERS = ["XXX"]  # with right hand side spaces removed
+    SEQUENCE_HEADERS = ["XXX"]
 
     def __init__(self):
         """Initialize."""
@@ -595,8 +552,6 @@ class _InsdcScanner:
                 line = self.handle.readline()
                 break
             if line[2 : self.FEATURE_QUALIFIER_INDENT].strip() == "":
-                # This is an empty feature line between qualifiers. Empty
-                # feature lines within qualifiers are handled below (ignored).
                 line = self.handle.readline()
                 continue
             if len(line) < self.FEATURE_QUALIFIER_INDENT:
@@ -615,14 +570,10 @@ class _InsdcScanner:
                 ):
                     line = self.handle.readline()
             else:
-                # Build up a list of the lines making up this feature:
                 if (
                     line[self.FEATURE_QUALIFIER_INDENT] != " "
                     and " " in line[self.FEATURE_QUALIFIER_INDENT :]
                 ):
-                    # The feature table design enforces a length limit on the feature keys.
-                    # Some third party files (e.g. IGMT's EMBL like files) solve this by
-                    # over indenting the location and qualifiers.
                     feature_key, line = line[2:].strip().split(None, 1)
                     feature_lines = [line]
                     warnings.warn(
@@ -637,9 +588,7 @@ class _InsdcScanner:
                     : self.FEATURE_QUALIFIER_INDENT
                 ] == self.FEATURE_QUALIFIER_SPACER or (
                     line != "" and line.rstrip() == ""
-                ):  # cope with blank lines in the midst of a feature
-                    # Use strip to remove any harmless trailing white space AND and leading
-                    # white space (e.g. out of spec files with too much indentation)
+                ):
                     feature_lines.append(line[self.FEATURE_QUALIFIER_INDENT :].strip())
                     line = self.handle.readline()
                 features.append(parse_feature(feature_key, feature_lines))
@@ -648,23 +597,7 @@ class _InsdcScanner:
 
     def parse_footer(self):
         """Return a tuple containing a list of any misc strings, and the sequence."""
-        if self.line in self.FEATURE_END_MARKERS:
-            while self.line[: self.HEADER_WIDTH].rstrip() not in self.SEQUENCE_HEADERS:
-                self.line = self.handle.readline()
-                assert self.line, "Premature end of file"
-                self.line = self.line.rstrip()
-
-        assert (
-            self.line[: self.HEADER_WIDTH].rstrip() in self.SEQUENCE_HEADERS
-        ), "Not at start of sequence"
-        while True:
-            line = self.handle.readline()
-            assert line, "Premature end of line during sequence data"
-            line = line.rstrip()
-            if line == "//":
-                break
-        self.line = line
-        return [], ""  # Dummy values!
+        pass
 
     def _feed_first_line(self, consumer, line):
         """Handle the LOCUS/ID line, passing data to the consumer (PRIVATE).
@@ -701,18 +634,10 @@ class _InsdcScanner:
                     consumer.feature_qualifier(q_key, q_value.replace("\n", " "))
 
     def _feed_misc_lines(self, consumer, lines):
-        """Handle any lines between features and sequence (list of strings), passing data to the consumer (PRIVATE).
-
-        This should be implemented by the EMBL / GenBank specific subclass
-
-        Used by the parse_records() and parse() methods.
-        """
         pass
 
     def feed(self, handle, consumer, do_features=True):
         """Feed a set of data into the consumer.
-
-        This method is intended for use with the "old" code in Bio.GenBank
 
         Arguments:
          - handle - A handle with the information to parse.
@@ -725,39 +650,21 @@ class _InsdcScanner:
          - false - Did not find a record
 
         """
-        # Should work with both EMBL and GenBank files provided the
-        # equivalent Bio.GenBank._FeatureConsumer methods are called...
         self.set_handle(handle)
         if not self.find_start():
-            # Could not find (another) record
             consumer.data = None
             return False
-
-        # We use the above class methods to parse the file into a simplified format.
-        # The first line, header lines and any misc lines after the features will be
-        # dealt with by GenBank / EMBL specific derived classes.
-
-        # First line and header:
         self._feed_first_line(consumer, self.line)
         self._feed_header_lines(consumer, self.parse_header())
-
-        # Features (common to both EMBL and GenBank):
         if do_features:
             self._feed_feature_table(consumer, self.parse_features(skip=False))
         else:
-            self.parse_features(skip=True)  # ignore the data
-
-        # Footer and sequence
+            self.parse_features(skip=True)
         misc_lines, sequence_string = self.parse_footer()
         self._feed_misc_lines(consumer, misc_lines)
-
         consumer.sequence(sequence_string)
-        # Calls to consumer.base_number() do nothing anyway
         consumer.record_end("//")
-
         assert self.line == "//"
-
-        # And we are done
         return True
 
     def parse(self, handle, do_features=True):
@@ -765,7 +672,7 @@ class _InsdcScanner:
 
         See also the method parse_records() for use on multi-record files.
         """
-        from Bio.GenBank import _FeatureConsumer
+        from Bio.SeqIO.GenBankIO import _FeatureConsumer
         from Bio.SeqIO.utils import FeatureValueCleaner
 
         consumer = _FeatureConsumer(
@@ -786,7 +693,6 @@ class _InsdcScanner:
 
         This method is intended for use in Bio.SeqIO
         """
-        # This is a generator function
         with as_handle(handle) as handle:
             while True:
                 record = self.parse(handle, do_features)
@@ -822,10 +728,8 @@ class _InsdcScanner:
         with as_handle(handle) as handle:
             self.set_handle(handle)
             while self.find_start():
-                # Got an EMBL or GenBank record...
-                self.parse_header()  # ignore header lines!
+                self.parse_header()
                 feature_tuples = self.parse_features()
-                # self.parse_footer() # ignore footer lines!
                 while True:
                     line = self.handle.readline()
                     if not line:
@@ -834,20 +738,10 @@ class _InsdcScanner:
                         break
                 self.line = line.rstrip()
 
-                # Now go though those features...
                 for key, location_string, qualifiers in feature_tuples:
                     if key == "CDS":
-                        # Create SeqRecord
-                        # ================
-                        # SeqRecord objects cannot be created with annotations, they
-                        # must be added afterwards.  So create an empty record and
-                        # then populate it:
                         record = SeqRecord(seq=None)
                         annotations = record.annotations
-
-                        # Should we add a location object to the annotations?
-                        # I *think* that only makes sense for SeqFeatures with their
-                        # sub features...
                         annotations["raw_location"] = location_string.replace(" ", "")
 
                         for (qualifier_name, qualifier_data) in qualifiers:
@@ -856,16 +750,13 @@ class _InsdcScanner:
                                 and qualifier_data[0] == '"'
                                 and qualifier_data[-1] == '"'
                             ):
-                                # Remove quotes
                                 qualifier_data = qualifier_data[1:-1]
-                            # Append the data to the annotation qualifier...
                             if qualifier_name == "translation":
                                 assert record.seq is None, "Multiple translations!"
                                 record.seq = Seq(
                                     qualifier_data.replace("\n", ""), alphabet
                                 )
                             elif qualifier_name == "db_xref":
-                                # its a list, possibly empty.  Its safe to extend
                                 record.dbxrefs.append(qualifier_data)
                             else:
                                 if qualifier_data is not None:
@@ -875,11 +766,8 @@ class _InsdcScanner:
                                 try:
                                     annotations[qualifier_name] += " " + qualifier_data
                                 except KeyError:
-                                    # Not an addition to existing data, its the first bit
                                     annotations[qualifier_name] = qualifier_data
 
-                        # Fill in the ID, Name, Description
-                        # =================================
                         try:
                             record.id = annotations[tags2id[0]]
                         except KeyError:

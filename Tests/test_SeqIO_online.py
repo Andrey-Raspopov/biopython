@@ -6,8 +6,7 @@
 
 """Testing online code for fetching sequences, and parsing them.
 
-Uses Bio.SeqIO to parse files downloaded with Bio.GenBank, Bio.WWW.NCBI,
-Bio.ExPASy etc.
+Uses Bio.SeqIO to parse files downloaded with Bio.WWW.NCBI, Bio.ExPASy etc.
 
 Goals:
     - Make sure that all retrieval is working as expected.

@@ -6,10 +6,6 @@
 # package.
 """Bio.SeqIO support for the "genbank" and "embl" file formats.
 
-You are expected to use this module via the Bio.SeqIO functions.
-Note that internally this module calls Bio.GenBank to do the actual
-parsing of GenBank, EMBL and IMGT files.
-
 See Also:
 International Nucleotide Sequence Database Collaboration
 http://www.insdc.org/
@@ -485,10 +481,10 @@ class EmblScanner(_InsdcScanner):
     RECORD_START = "ID   "
     HEADER_WIDTH = 5
     FEATURE_START_MARKERS = ["FH   Key             Location/Qualifiers", "FH"]
-    FEATURE_END_MARKERS = ["XX"]  # XX can also mark the end of many things!
+    FEATURE_END_MARKERS = ["XX"]
     FEATURE_QUALIFIER_INDENT = 21
     FEATURE_QUALIFIER_SPACER = "FT" + " " * (FEATURE_QUALIFIER_INDENT - 2)
-    SEQUENCE_HEADERS = ["SQ", "CO"]  # Remove trailing spaces
+    SEQUENCE_HEADERS = ["SQ", "CO"]
 
     EMBL_INDENT = HEADER_WIDTH
     EMBL_SPACER = " " * EMBL_INDENT

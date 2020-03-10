@@ -6,10 +6,6 @@
 # package.
 """Bio.SeqIO support for the "genbank" and "embl" file formats.
 
-You are expected to use this module via the Bio.SeqIO functions.
-Note that internally this module calls Bio.GenBank to do the actual
-parsing of GenBank, EMBL and IMGT files.
-
 See Also:
 International Nucleotide Sequence Database Collaboration
 http://www.insdc.org/
@@ -78,8 +74,6 @@ class ImgtScanner(EmblScanner):
     the features should be indented by 25 characters not 21 characters. In
     practice the IMGT flat files tend to use either 21 or 25 characters, so we
     must cope with both.
-
-    This is private to encourage use of Bio.SeqIO rather than Bio.GenBank.
     """
 
     FEATURE_START_MARKERS = [
