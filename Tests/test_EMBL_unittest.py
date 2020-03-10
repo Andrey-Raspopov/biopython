@@ -19,11 +19,11 @@ class EMBLTests(unittest.TestCase):
         def parse_content_after_co():
             rec = SeqIO.read(path.join("EMBL", "xx_after_co.embl"), "embl")
 
-        self.assertRaises(ValueError, parse_content_after_co)
+        self.assertRaises(AssertionError, parse_content_after_co)
 
         try:
             parse_content_after_co()
-        except ValueError as e:
+        except AssertionError as e:
             self.assertEqual(str(e), "Unexpected content after SQ or CO line: 'XX'")
         else:
             self.assertTrue(False, "Error message without explanation raised by content after CO line")
